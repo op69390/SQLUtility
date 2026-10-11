@@ -34,6 +34,25 @@
             this.boutonModifierJointure = new System.Windows.Forms.Button();
             this.boutonRetirerTable = new System.Windows.Forms.Button();
             this.colTableC = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.boutonExistence = new System.Windows.Forms.Button();
+            this.ongletLot = new System.Windows.Forms.TabPage();
+            this.panneauLotModes = new System.Windows.Forms.Panel();
+            this.radioLotSupprimer = new System.Windows.Forms.RadioButton();
+            this.radioLotModifier = new System.Windows.Forms.RadioButton();
+            this.radioLotCopier = new System.Windows.Forms.RadioButton();
+            this.etiquetteAideLot = new System.Windows.Forms.Label();
+            this.panneauLotOutils = new System.Windows.Forms.Panel();
+            this.boutonSourceLot = new System.Windows.Forms.Button();
+            this.boutonCibleLot = new System.Windows.Forms.Button();
+            this.etiquetteSourceLot = new System.Windows.Forms.Label();
+            this.grilleLot = new System.Windows.Forms.DataGridView();
+            this.colLNom = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colLLibelle = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colLType = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colLSource = new System.Windows.Forms.DataGridViewComboBoxColumn();
+            this.colLValeur = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colLNull = new System.Windows.Forms.DataGridViewCheckBoxColumn();
+            this.colLFormat = new System.Windows.Forms.DataGridViewComboBoxColumn();
             this.etiquetteInfoTable = new System.Windows.Forms.Label();
             this.onglets = new System.Windows.Forms.TabControl();
             this.ongletConsulter = new System.Windows.Forms.TabPage();
@@ -99,6 +118,10 @@
             this.separateurConsulter.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grilleChoixColonnes)).BeginInit();
             this.panneauTables.SuspendLayout();
+            this.ongletLot.SuspendLayout();
+            this.panneauLotModes.SuspendLayout();
+            this.panneauLotOutils.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.grilleLot)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.grilleTables)).BeginInit();
             this.panneauOptions.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.champLimite)).BeginInit();
@@ -189,6 +212,7 @@
             //
             // panneauTables
             //
+            this.panneauTables.Controls.Add(this.boutonExistence);
             this.panneauTables.Controls.Add(this.boutonRetirerTable);
             this.panneauTables.Controls.Add(this.boutonModifierJointure);
             this.panneauTables.Controls.Add(this.grilleTables);
@@ -196,7 +220,7 @@
             this.panneauTables.Dock = System.Windows.Forms.DockStyle.Top;
             this.panneauTables.Location = new System.Drawing.Point(0, 0);
             this.panneauTables.Name = "panneauTables";
-            this.panneauTables.Size = new System.Drawing.Size(976, 122);
+            this.panneauTables.Size = new System.Drawing.Size(976, 112);
             this.panneauTables.TabIndex = 0;
             //
             // etiquetteTables
@@ -228,7 +252,7 @@
             this.grilleTables.ReadOnly = true;
             this.grilleTables.RowHeadersVisible = false;
             this.grilleTables.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
-            this.grilleTables.Size = new System.Drawing.Size(818, 96);
+            this.grilleTables.Size = new System.Drawing.Size(818, 86);
             this.grilleTables.TabIndex = 1;
             this.grilleTables.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.grilleTables_CellDoubleClick);
             //
@@ -259,24 +283,215 @@
             // boutonModifierJointure
             //
             this.boutonModifierJointure.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.boutonModifierJointure.Location = new System.Drawing.Point(832, 22);
+            this.boutonModifierJointure.Location = new System.Drawing.Point(832, 20);
             this.boutonModifierJointure.Name = "boutonModifierJointure";
             this.boutonModifierJointure.Size = new System.Drawing.Size(138, 24);
             this.boutonModifierJointure.TabIndex = 2;
-            this.boutonModifierJointure.Text = "Modifier la jointure…";
+            this.boutonModifierJointure.Text = "Modifier…";
             this.boutonModifierJointure.UseVisualStyleBackColor = true;
             this.boutonModifierJointure.Click += new System.EventHandler(this.boutonModifierJointure_Click);
             //
             // boutonRetirerTable
             //
             this.boutonRetirerTable.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
-            this.boutonRetirerTable.Location = new System.Drawing.Point(832, 52);
+            this.boutonRetirerTable.Location = new System.Drawing.Point(832, 49);
             this.boutonRetirerTable.Name = "boutonRetirerTable";
             this.boutonRetirerTable.Size = new System.Drawing.Size(138, 24);
             this.boutonRetirerTable.TabIndex = 3;
             this.boutonRetirerTable.Text = "Retirer la table";
             this.boutonRetirerTable.UseVisualStyleBackColor = true;
             this.boutonRetirerTable.Click += new System.EventHandler(this.boutonRetirerTable_Click);
+            //
+            // boutonExistence
+            //
+            this.boutonExistence.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.boutonExistence.Location = new System.Drawing.Point(832, 78);
+            this.boutonExistence.Name = "boutonExistence";
+            this.boutonExistence.Size = new System.Drawing.Size(138, 24);
+            this.boutonExistence.TabIndex = 4;
+            this.boutonExistence.Text = "Condition d'existence…";
+            this.boutonExistence.UseVisualStyleBackColor = true;
+            this.boutonExistence.Click += new System.EventHandler(this.boutonExistence_Click);
+            //
+            // ongletLot
+            //
+            this.ongletLot.Controls.Add(this.grilleLot);
+            this.ongletLot.Controls.Add(this.panneauLotOutils);
+            this.ongletLot.Controls.Add(this.panneauLotModes);
+            this.ongletLot.Location = new System.Drawing.Point(4, 22);
+            this.ongletLot.Name = "ongletLot";
+            this.ongletLot.Size = new System.Drawing.Size(976, 441);
+            this.ongletLot.TabIndex = 2;
+            this.ongletLot.Text = "Traitement par lot";
+            this.ongletLot.UseVisualStyleBackColor = true;
+            //
+            // panneauLotModes
+            //
+            this.panneauLotModes.Controls.Add(this.etiquetteAideLot);
+            this.panneauLotModes.Controls.Add(this.radioLotCopier);
+            this.panneauLotModes.Controls.Add(this.radioLotModifier);
+            this.panneauLotModes.Controls.Add(this.radioLotSupprimer);
+            this.panneauLotModes.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panneauLotModes.Location = new System.Drawing.Point(0, 0);
+            this.panneauLotModes.Name = "panneauLotModes";
+            this.panneauLotModes.Size = new System.Drawing.Size(976, 80);
+            this.panneauLotModes.TabIndex = 0;
+            //
+            // radioLotSupprimer
+            //
+            this.radioLotSupprimer.AutoSize = true;
+            this.radioLotSupprimer.Location = new System.Drawing.Point(12, 8);
+            this.radioLotSupprimer.Name = "radioLotSupprimer";
+            this.radioLotSupprimer.Size = new System.Drawing.Size(240, 17);
+            this.radioLotSupprimer.TabIndex = 0;
+            this.radioLotSupprimer.Text = "Supprimer les lignes consultées (DELETE)";
+            this.radioLotSupprimer.UseVisualStyleBackColor = true;
+            this.radioLotSupprimer.CheckedChanged += new System.EventHandler(this.ModeLot_CheckedChanged);
+            //
+            // radioLotModifier
+            //
+            this.radioLotModifier.AutoSize = true;
+            this.radioLotModifier.Checked = true;
+            this.radioLotModifier.Location = new System.Drawing.Point(12, 31);
+            this.radioLotModifier.Name = "radioLotModifier";
+            this.radioLotModifier.Size = new System.Drawing.Size(240, 17);
+            this.radioLotModifier.TabIndex = 1;
+            this.radioLotModifier.TabStop = true;
+            this.radioLotModifier.Text = "Modifier les lignes consultées (UPDATE)";
+            this.radioLotModifier.UseVisualStyleBackColor = true;
+            this.radioLotModifier.CheckedChanged += new System.EventHandler(this.ModeLot_CheckedChanged);
+            //
+            // radioLotCopier
+            //
+            this.radioLotCopier.AutoSize = true;
+            this.radioLotCopier.Location = new System.Drawing.Point(12, 54);
+            this.radioLotCopier.Name = "radioLotCopier";
+            this.radioLotCopier.Size = new System.Drawing.Size(330, 17);
+            this.radioLotCopier.TabIndex = 2;
+            this.radioLotCopier.Text = "Copier les lignes consultées dans une autre table (INSERT … SELECT)";
+            this.radioLotCopier.UseVisualStyleBackColor = true;
+            this.radioLotCopier.CheckedChanged += new System.EventHandler(this.ModeLot_CheckedChanged);
+            //
+            // etiquetteAideLot
+            //
+            this.etiquetteAideLot.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.etiquetteAideLot.ForeColor = System.Drawing.SystemColors.GrayText;
+            this.etiquetteAideLot.Location = new System.Drawing.Point(420, 4);
+            this.etiquetteAideLot.Name = "etiquetteAideLot";
+            this.etiquetteAideLot.Size = new System.Drawing.Size(550, 72);
+            this.etiquetteAideLot.TabIndex = 3;
+            this.etiquetteAideLot.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            //
+            // panneauLotOutils
+            //
+            this.panneauLotOutils.Controls.Add(this.etiquetteSourceLot);
+            this.panneauLotOutils.Controls.Add(this.boutonCibleLot);
+            this.panneauLotOutils.Controls.Add(this.boutonSourceLot);
+            this.panneauLotOutils.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panneauLotOutils.Location = new System.Drawing.Point(0, 80);
+            this.panneauLotOutils.Name = "panneauLotOutils";
+            this.panneauLotOutils.Size = new System.Drawing.Size(976, 34);
+            this.panneauLotOutils.TabIndex = 1;
+            //
+            // boutonSourceLot
+            //
+            this.boutonSourceLot.Location = new System.Drawing.Point(6, 5);
+            this.boutonSourceLot.Name = "boutonSourceLot";
+            this.boutonSourceLot.Size = new System.Drawing.Size(300, 24);
+            this.boutonSourceLot.TabIndex = 0;
+            this.boutonSourceLot.Text = "Prendre des valeurs dans la table choisie en haut…";
+            this.boutonSourceLot.UseVisualStyleBackColor = true;
+            this.boutonSourceLot.Click += new System.EventHandler(this.boutonSourceLot_Click);
+            //
+            // boutonCibleLot
+            //
+            this.boutonCibleLot.Location = new System.Drawing.Point(6, 5);
+            this.boutonCibleLot.Name = "boutonCibleLot";
+            this.boutonCibleLot.Size = new System.Drawing.Size(300, 24);
+            this.boutonCibleLot.TabIndex = 1;
+            this.boutonCibleLot.Text = "Copier vers la table choisie en haut…";
+            this.boutonCibleLot.UseVisualStyleBackColor = true;
+            this.boutonCibleLot.Click += new System.EventHandler(this.boutonCibleLot_Click);
+            //
+            // etiquetteSourceLot
+            //
+            this.etiquetteSourceLot.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.etiquetteSourceLot.Location = new System.Drawing.Point(314, 10);
+            this.etiquetteSourceLot.Name = "etiquetteSourceLot";
+            this.etiquetteSourceLot.Size = new System.Drawing.Size(656, 16);
+            this.etiquetteSourceLot.TabIndex = 2;
+            //
+            // grilleLot
+            //
+            this.grilleLot.AllowUserToAddRows = false;
+            this.grilleLot.AllowUserToDeleteRows = false;
+            this.grilleLot.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.grilleLot.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.grilleLot.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.colLNom,
+            this.colLLibelle,
+            this.colLType,
+            this.colLSource,
+            this.colLValeur,
+            this.colLNull,
+            this.colLFormat});
+            this.grilleLot.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.grilleLot.EditMode = System.Windows.Forms.DataGridViewEditMode.EditOnEnter;
+            this.grilleLot.Location = new System.Drawing.Point(0, 114);
+            this.grilleLot.Name = "grilleLot";
+            this.grilleLot.RowHeadersVisible = false;
+            this.grilleLot.Size = new System.Drawing.Size(976, 327);
+            this.grilleLot.TabIndex = 2;
+            this.grilleLot.CellValueChanged += new System.Windows.Forms.DataGridViewCellEventHandler(this.Grille_CellValueChanged);
+            this.grilleLot.CurrentCellDirtyStateChanged += new System.EventHandler(this.Grille_CurrentCellDirtyStateChanged);
+            this.grilleLot.DataError += new System.Windows.Forms.DataGridViewDataErrorEventHandler(this.Grille_DataError);
+            //
+            // colLNom
+            //
+            this.colLNom.FillWeight = 80F;
+            this.colLNom.HeaderText = "Colonne";
+            this.colLNom.Name = "colLNom";
+            this.colLNom.ReadOnly = true;
+            //
+            // colLLibelle
+            //
+            this.colLLibelle.FillWeight = 150F;
+            this.colLLibelle.HeaderText = "Libellé";
+            this.colLLibelle.Name = "colLLibelle";
+            this.colLLibelle.ReadOnly = true;
+            //
+            // colLType
+            //
+            this.colLType.FillWeight = 80F;
+            this.colLType.HeaderText = "Type";
+            this.colLType.Name = "colLType";
+            this.colLType.ReadOnly = true;
+            //
+            // colLSource
+            //
+            this.colLSource.FillWeight = 160F;
+            this.colLSource.HeaderText = "Prendre la valeur de";
+            this.colLSource.Name = "colLSource";
+            //
+            // colLValeur
+            //
+            this.colLValeur.FillWeight = 110F;
+            this.colLValeur.HeaderText = "ou valeur fixe";
+            this.colLValeur.Name = "colLValeur";
+            //
+            // colLNull
+            //
+            this.colLNull.FillWeight = 35F;
+            this.colLNull.HeaderText = "NULL";
+            this.colLNull.Name = "colLNull";
+            //
+            // colLFormat
+            //
+            this.colLFormat.FillWeight = 100F;
+            this.colLFormat.HeaderText = "Date Atlas stockée en";
+            this.colLFormat.Name = "colLFormat";
             //
             // colTableC
             //
@@ -300,6 +515,7 @@
             //
             this.onglets.Controls.Add(this.ongletConsulter);
             this.onglets.Controls.Add(this.ongletLigne);
+            this.onglets.Controls.Add(this.ongletLot);
             this.onglets.Dock = System.Windows.Forms.DockStyle.Fill;
             this.onglets.Location = new System.Drawing.Point(0, 64);
             this.onglets.Name = "onglets";
@@ -883,6 +1099,11 @@
             this.separateurConsulter.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.grilleChoixColonnes)).EndInit();
             this.panneauTables.ResumeLayout(false);
+            this.ongletLot.ResumeLayout(false);
+            this.panneauLotModes.ResumeLayout(false);
+            this.panneauLotModes.PerformLayout();
+            this.panneauLotOutils.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.grilleLot)).EndInit();
             this.panneauTables.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grilleTables)).EndInit();
             this.panneauOptions.ResumeLayout(false);
@@ -919,6 +1140,25 @@
         private System.Windows.Forms.Button boutonModifierJointure;
         private System.Windows.Forms.Button boutonRetirerTable;
         private System.Windows.Forms.DataGridViewTextBoxColumn colTableC;
+        private System.Windows.Forms.Button boutonExistence;
+        private System.Windows.Forms.TabPage ongletLot;
+        private System.Windows.Forms.Panel panneauLotModes;
+        private System.Windows.Forms.RadioButton radioLotSupprimer;
+        private System.Windows.Forms.RadioButton radioLotModifier;
+        private System.Windows.Forms.RadioButton radioLotCopier;
+        private System.Windows.Forms.Label etiquetteAideLot;
+        private System.Windows.Forms.Panel panneauLotOutils;
+        private System.Windows.Forms.Button boutonSourceLot;
+        private System.Windows.Forms.Button boutonCibleLot;
+        private System.Windows.Forms.Label etiquetteSourceLot;
+        private System.Windows.Forms.DataGridView grilleLot;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colLNom;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colLLibelle;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colLType;
+        private System.Windows.Forms.DataGridViewComboBoxColumn colLSource;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colLValeur;
+        private System.Windows.Forms.DataGridViewCheckBoxColumn colLNull;
+        private System.Windows.Forms.DataGridViewComboBoxColumn colLFormat;
         private System.Windows.Forms.Label etiquetteInfoTable;
         private System.Windows.Forms.TabControl onglets;
         private System.Windows.Forms.TabPage ongletConsulter;

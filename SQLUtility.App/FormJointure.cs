@@ -6,15 +6,30 @@ using SQLUtility.Core.Catalogue;
 
 namespace SQLUtility.App
 {
+    /// <summary>Usage de la fenêtre de liaison entre une table et la requête.</summary>
+    public enum ModeLiaison
+    {
+        /// <summary>Jointure INNER / LEFT OUTER (niveau 2).</summary>
+        Jointure,
+
+        /// <summary>Condition d'existence : EXISTS (radio « interne ») / NOT EXISTS (radio « externe »). (EF-48)</summary>
+        Existence,
+
+        /// <summary>Table source des valeurs d'une modification par lot : pas de choix de type. (EF-49)</summary>
+        Source
+    }
+
     /// <summary>
-    /// Définition d'une jointure (niveau 2, EF-44 / EF-45) : propositions du
+    /// Liaison d'une table à la requête : jointure (niveau 2, EF-44 / EF-45), condition
+    /// d'existence ou source de valeurs (niveau 4, EF-48 / EF-49). Propositions du
     /// <see cref="DetecteurJointures"/> vis-à-vis de chaque table déjà présente, puis
-    /// conditions ajustables à la main et choix INNER / LEFT OUTER.
+    /// conditions ajustables à la main.
     /// </summary>
     public partial class FormJointure : Form
     {
         private readonly List<TableRequete> pPresentes;
         private readonly TableRequete pNouvelle;
+        private readonly ModeLiaison pMode;
         private readonly Dictionary<string, ColonneInfo> pColonnesJointes = new Dictionary<string, ColonneInfo>();
         private readonly Dictionary<string, ColonneInfo> pColonnesLiees = new Dictionary<string, ColonneInfo>();
         private OrigineJointure pOrigine = OrigineJointure.Manuelle;
@@ -23,16 +38,45 @@ namespace SQLUtility.App
         /// <param name="presentes">Tables déjà dans la requête (la nouvelle ne peut se lier qu'à elles).</param>
         /// <param name="existante">Jointure à modifier, ou null pour une nouvelle jointure.</param>
         public FormJointure(IList<TableRequete> presentes, TableRequete nouvelle, Jointure existante)
+            : this(presentes, nouvelle, existante, ModeLiaison.Jointure)
+        {
+        }
+
+        /// <param name="existante">
+        /// Liaison à modifier, ou null. En mode existence, son type porte la négation :
+        /// <see cref="TypeJointure.Interne"/> = EXISTS, <see cref="TypeJointure.ExterneGauche"/> = NOT EXISTS.
+        /// </param>
+        public FormJointure(IList<TableRequete> presentes, TableRequete nouvelle, Jointure existante, ModeLiaison mode)
         {
             if (presentes == null || presentes.Count == 0) throw new ArgumentException("Aucune table présente.", nameof(presentes));
             if (nouvelle == null) throw new ArgumentNullException(nameof(nouvelle));
             pPresentes = new List<TableRequete>(presentes);
             pNouvelle = nouvelle;
+            pMode = mode;
             InitializeComponent();
 
             TableInfo table = nouvelle.Table;
-            etiquetteTitre.Text = "Joindre " + nouvelle.Alias + " — " + table.Schema + "." + table.Nom
+            string designation = nouvelle.Alias + " — " + table.Schema + "." + table.Nom
                 + (string.IsNullOrEmpty(table.Libelle) ? string.Empty : " (" + table.Libelle + ")");
+            switch (mode)
+            {
+                case ModeLiaison.Existence:
+                    Text = "Condition d'existence";
+                    etiquetteTitre.Text = "Condition d'existence dans " + designation;
+                    radioInterne.Text = "Garder les lignes qui ont au moins une ligne liée dans " + nouvelle.Alias + " (EXISTS)";
+                    radioExterne.Text = "Garder les lignes qui n'ont AUCUNE ligne liée dans " + nouvelle.Alias + " (NOT EXISTS)";
+                    boutonOk.Text = "Ajouter";
+                    break;
+                case ModeLiaison.Source:
+                    Text = "Table source des valeurs";
+                    etiquetteTitre.Text = "Valeurs prises dans " + designation;
+                    radioInterne.Visible = radioExterne.Visible = false;
+                    boutonOk.Text = "Utiliser";
+                    break;
+                default:
+                    etiquetteTitre.Text = "Joindre " + designation;
+                    break;
+            }
             colJointe.HeaderText = "Colonne de " + nouvelle.Alias + " (" + table.Nom + ")";
             foreach (ColonneInfo colonne in nouvelle.Structure.Colonnes)
             {
@@ -83,9 +127,13 @@ namespace SQLUtility.App
                 pRemplissage = false;
             }
             pOrigine = element.Proposition.Origine;
-            // Recherche de libellé (au plus une ligne) : LEFT pour ne perdre aucune ligne ; sinon INNER.
-            radioExterne.Checked = element.Proposition.AuPlusUneLigne;
-            radioInterne.Checked = !element.Proposition.AuPlusUneLigne;
+            // Jointure de recherche de libellé (au plus une ligne) : LEFT pour ne perdre aucune
+            // ligne ; sinon INNER. En existence ou source, le choix de l'utilisateur est conservé.
+            if (pMode == ModeLiaison.Jointure)
+            {
+                radioExterne.Checked = element.Proposition.AuPlusUneLigne;
+                radioInterne.Checked = !element.Proposition.AuPlusUneLigne;
+            }
             MettreAJourAvertissement();
         }
 
@@ -185,8 +233,11 @@ namespace SQLUtility.App
         private void MettreAJourAvertissement()
         {
             List<string> messages = new List<string>();
-            if (pOrigine == OrigineJointure.ClePartielleDeduite)
+            // EXISTS ne multiplie jamais les lignes : la clé partielle n'y pose pas de problème.
+            if (pOrigine == OrigineJointure.ClePartielleDeduite && pMode == ModeLiaison.Jointure)
                 messages.Add("Clé partielle : une ligne peut correspondre à plusieurs lignes de " + pNouvelle.Alias + " (résultat multiplié).");
+            if (pOrigine == OrigineJointure.ClePartielleDeduite && pMode == ModeLiaison.Source)
+                messages.Add("Clé partielle : plusieurs lignes sources possibles ; l'exécution échouerait alors (SQL0811) sans rien modifier.");
             foreach (DataGridViewRow ligne in grilleConditions.Rows)
             {
                 ColonneInfo jointe, liee;

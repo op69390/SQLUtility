@@ -32,6 +32,13 @@ namespace SQLUtility.App
         private readonly List<TableRequete> pTables = new List<TableRequete>();
         private readonly List<Jointure> pJointures = new List<Jointure>();
 
+        // Niveau 4 (EF-48 / EF-49) : conditions d'existence et traitement par lot.
+        private readonly List<CritereExistence> pExistences = new List<CritereExistence>();
+        private SourceMiseAJour pSourceLot;
+        private StructureTable pCibleLot;
+        private readonly Dictionary<string, ColonneInfo> pColonnesSourceLot = new Dictionary<string, ColonneInfo>();
+        private readonly Dictionary<string, ColonneRequete> pColonnesCopieLot = new Dictionary<string, ColonneRequete>();
+
         private readonly Dictionary<string, ColonneRequete> pColonnesParLibelle = new Dictionary<string, ColonneRequete>();
         private readonly Dictionary<string, OperateurFiltre> pOperateurs = new Dictionary<string, OperateurFiltre>();
         private readonly Dictionary<string, FormatDate> pFormats = new Dictionary<string, FormatDate>();
@@ -52,6 +59,7 @@ namespace SQLUtility.App
             InitializeComponent();
             InitialiserListes();
             AppliquerMode();
+            RemplirLot();
         }
 
         /// <summary>Instruction à insérer dans l'éditeur (renseignée quand la fenêtre se ferme par OK).</summary>
@@ -76,6 +84,7 @@ namespace SQLUtility.App
             colFiltreFormat.Items.Add(SansFormat);
             colVFormat.Items.Add(SansFormat);
             colFormatC.Items.Add(SansFormat);
+            colLFormat.Items.Add(SansFormat);
             foreach (DescriptionFormatDate description in ReferentielFormatsDate.Tous)
             {
                 if (!description.Numerique || !description.Implemente) continue;
@@ -83,6 +92,7 @@ namespace SQLUtility.App
                 colFiltreFormat.Items.Add(description.Libelle);
                 colVFormat.Items.Add(description.Libelle);
                 colFormatC.Items.Add(description.Libelle);
+                colLFormat.Items.Add(description.Libelle);
             }
             // ISO stocké en numérique (AAAAMMJJ) : format DECIMAL(8,0) fréquent hors Atlas.
             string libelleIso = "AAAAMMJJ (numérique)";
@@ -90,6 +100,7 @@ namespace SQLUtility.App
             colFiltreFormat.Items.Add(libelleIso);
             colVFormat.Items.Add(libelleIso);
             colFormatC.Items.Add(libelleIso);
+            colLFormat.Items.Add(libelleIso);
 
             colCalcul.Items.Add(string.Empty);
             AjouterCalcul("Regrouper", FonctionAgregat.Regrouper, PeriodeDate.Aucune);
@@ -299,9 +310,13 @@ namespace SQLUtility.App
                 // Nouvelle table principale : la consultation repart d'une seule table.
                 pTables.Clear();
                 pJointures.Clear();
+                pExistences.Clear();
+                pSourceLot = null;
+                pCibleLot = null;
                 pTables.Add(new TableRequete(pStructure, "A"));
                 AjouterColonnesConsultation(pTables[0]);
                 RafraichirTables();
+                RemplirLot();
 
                 foreach (ColonneInfo colonne in pStructure.Colonnes)
                 {
@@ -407,7 +422,7 @@ namespace SQLUtility.App
 
         private void grilleTables_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
         {
-            if (e.RowIndex > 0) ModifierJointure(e.RowIndex);
+            if (e.RowIndex > 0) ModifierLiaison(e.RowIndex);
         }
 
         private void boutonModifierJointure_Click(object sender, EventArgs e)
@@ -415,10 +430,169 @@ namespace SQLUtility.App
             int index = grilleTables.CurrentRow != null ? grilleTables.CurrentRow.Index : -1;
             if (index < 1)
             {
-                Info("Sélectionnez une table jointe (B, C...) : la table A n'a pas de jointure.");
+                Info("Sélectionnez une table jointe (B, C...) ou une condition d'existence (S1...) : la table A n'a pas de liaison.");
                 return;
             }
-            ModifierJointure(index);
+            ModifierLiaison(index);
+        }
+
+        /// <summary>Lignes de la liste : tables (A, jointures), puis conditions d'existence.</summary>
+        private void ModifierLiaison(int index)
+        {
+            if (index < pTables.Count) ModifierJointure(index);
+            else ModifierExistence(index - pTables.Count);
+        }
+
+        // ----------------------------------------------------------------- Conditions d'existence (niveau 4, EF-48)
+
+        private void boutonExistence_Click(object sender, EventArgs e)
+        {
+            if (pStructure == null)
+            {
+                Info("Chargez d'abord la table principale (A), puis choisissez la table de la condition d'existence.");
+                return;
+            }
+            StructureTable structure = DecrireTableSaisie("de la condition d'existence");
+            if (structure == null) return;
+
+            TableRequete table = new TableRequete(structure, AliasExistence());
+            using (FormJointure dialogue = new FormJointure(pTables, table, null, ModeLiaison.Existence))
+            {
+                if (dialogue.ShowDialog(this) != DialogResult.OK) return;
+                pExistences.Add(ExistenceDepuis(table, dialogue.Jointure));
+            }
+            AjouterColonnesExistence(table);
+            RafraichirTables();
+            onglets.SelectedTab = ongletConsulter;
+            Info("Condition d'existence " + table.Alias + " ajoutée : ses colonnes sont proposées dans les filtres (préfixe " + table.Alias + ".).");
+            Regenerer();
+        }
+
+        private void ModifierExistence(int index)
+        {
+            CritereExistence actuelle = pExistences[index];
+            Jointure transport = new Jointure(actuelle.Table, actuelle.Negation ? TypeJointure.ExterneGauche : TypeJointure.Interne, OrigineJointure.Manuelle);
+            transport.Conditions.AddRange(actuelle.Conditions);
+            using (FormJointure dialogue = new FormJointure(pTables, actuelle.Table, transport, ModeLiaison.Existence))
+            {
+                if (dialogue.ShowDialog(this) != DialogResult.OK) return;
+                pExistences[index] = ExistenceDepuis(actuelle.Table, dialogue.Jointure);
+            }
+            RafraichirTables();
+            Regenerer();
+        }
+
+        /// <summary>Le type de la liaison porte la négation : LEFT (« sans correspondance ») = NOT EXISTS.</summary>
+        private static CritereExistence ExistenceDepuis(TableRequete table, Jointure liaison)
+        {
+            CritereExistence existence = new CritereExistence(table, liaison.Type == TypeJointure.ExterneGauche);
+            existence.Conditions.AddRange(liaison.Conditions);
+            return existence;
+        }
+
+        /// <summary>Colonnes de la sous-requête : proposées dans les filtres seulement (jamais affichées).</summary>
+        private void AjouterColonnesExistence(TableRequete table)
+        {
+            foreach (ColonneInfo colonne in table.Structure.Colonnes)
+            {
+                string libelle = LibelleColonne(table, colonne);
+                pColonnesParLibelle[libelle] = new ColonneRequete(table, colonne);
+                colFiltreColonne.Items.Add(libelle);
+            }
+        }
+
+        private void RetirerExistence(int index)
+        {
+            TableRequete table = pExistences[index].Table;
+            pRemplissage = true;
+            try
+            {
+                RetirerFiltresEtLibelles(table);
+                pExistences.RemoveAt(index);
+            }
+            finally
+            {
+                pRemplissage = false;
+            }
+            RafraichirTables();
+            Regenerer();
+        }
+
+        /// <summary>Enlève les filtres portant sur la table et ses entrées dans la liste des filtres.</summary>
+        private void RetirerFiltresEtLibelles(TableRequete table)
+        {
+            for (int i = grilleFiltres.Rows.Count - 1; i >= 0; i--)
+            {
+                ColonneRequete colonne = ColonneDuFiltre(grilleFiltres.Rows[i]);
+                if (!grilleFiltres.Rows[i].IsNewRow && colonne != null && colonne.Table == table) grilleFiltres.Rows.RemoveAt(i);
+            }
+            foreach (ColonneInfo colonne in table.Structure.Colonnes)
+            {
+                string libelle = LibelleColonne(table, colonne);
+                pColonnesParLibelle.Remove(libelle);
+                colFiltreColonne.Items.Remove(libelle);
+            }
+        }
+
+        private bool EstTableExistence(TableRequete table)
+        {
+            foreach (CritereExistence existence in pExistences)
+                if (existence.Table == table) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Conditions d'existence prêtes à générer : les filtres saisis sur les colonnes S1, S2...
+        /// sont placés dans leur sous-requête.
+        /// </summary>
+        private List<CritereExistence> ExistencesSaisies()
+        {
+            List<CritereExistence> existences = new List<CritereExistence>();
+            foreach (CritereExistence modele in pExistences)
+            {
+                CritereExistence existence = new CritereExistence(modele.Table, modele.Negation);
+                existence.Conditions.AddRange(modele.Conditions);
+                foreach (CritereFiltre critere in CriteresDesFiltres(true))
+                    if (critere.Table == modele.Table) existence.Criteres.Add(critere);
+                existences.Add(existence);
+            }
+            return existences;
+        }
+
+        /// <summary>Premier alias libre pour une sous-requête : S1, S2...</summary>
+        private string AliasExistence()
+        {
+            for (int i = 1; ; i++)
+            {
+                string alias = "S" + i;
+                if (!pExistences.Exists(x => string.Equals(x.Table.Alias, alias, StringComparison.OrdinalIgnoreCase))) return alias;
+            }
+        }
+
+        /// <summary>Table choisie dans la liste du haut, décrite par le catalogue ; null (et message) sinon.</summary>
+        private StructureTable DecrireTableSaisie(string role)
+        {
+            TableInfo table = TableSaisie();
+            if (table == null)
+            {
+                Info("Choisissez dans la liste « Table » en haut la table " + role + ".");
+                return null;
+            }
+            Cursor curseur = Cursor;
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                return pProvider.DecrireTable(pProfil, table);
+            }
+            catch (Exception ex)
+            {
+                Info("Échec du chargement de " + table.Nom + " : " + ex.Message);
+                return null;
+            }
+            finally
+            {
+                Cursor = curseur;
+            }
         }
 
         private void ModifierJointure(int index)
@@ -438,19 +612,31 @@ namespace SQLUtility.App
             int index = grilleTables.CurrentRow != null ? grilleTables.CurrentRow.Index : -1;
             if (index < 1)
             {
-                Info("Sélectionnez une table jointe à retirer (la table A se change avec « Charger »).");
+                Info("Sélectionnez une table jointe ou une condition d'existence à retirer (la table A se change avec « Charger »).");
+                return;
+            }
+            if (index >= pTables.Count)
+            {
+                RetirerExistence(index - pTables.Count);
                 return;
             }
             TableRequete table = pTables[index];
+            List<string> dependants = new List<string>();
             foreach (Jointure autre in pJointures)
             {
                 if (autre.Table == table) continue;
                 foreach (ConditionJointure condition in autre.Conditions)
-                {
-                    if (condition.TableLiee != table) continue;
-                    Info("Impossible de retirer " + table.Alias + " : la jointure de " + autre.Table.Alias + " s'appuie dessus.");
-                    return;
-                }
+                    if (condition.TableLiee == table && !dependants.Contains(autre.Table.Alias)) dependants.Add(autre.Table.Alias);
+            }
+            foreach (CritereExistence existence in pExistences)
+            {
+                foreach (ConditionJointure condition in existence.Conditions)
+                    if (condition.TableLiee == table && !dependants.Contains(existence.Table.Alias)) dependants.Add(existence.Table.Alias);
+            }
+            if (dependants.Count > 0)
+            {
+                Info("Impossible de retirer " + table.Alias + " : " + string.Join(", ", dependants) + " s'appuie dessus.");
+                return;
             }
 
             pRemplissage = true;
@@ -458,17 +644,7 @@ namespace SQLUtility.App
             {
                 for (int i = grilleChoixColonnes.Rows.Count - 1; i >= 0; i--)
                     if (((ColonneRequete)grilleChoixColonnes.Rows[i].Tag).Table == table) grilleChoixColonnes.Rows.RemoveAt(i);
-                for (int i = grilleFiltres.Rows.Count - 1; i >= 0; i--)
-                {
-                    ColonneRequete colonne = ColonneDuFiltre(grilleFiltres.Rows[i]);
-                    if (!grilleFiltres.Rows[i].IsNewRow && colonne != null && colonne.Table == table) grilleFiltres.Rows.RemoveAt(i);
-                }
-                foreach (ColonneInfo colonne in table.Structure.Colonnes)
-                {
-                    string libelle = LibelleColonne(table, colonne);
-                    pColonnesParLibelle.Remove(libelle);
-                    colFiltreColonne.Items.Remove(libelle);
-                }
+                RetirerFiltresEtLibelles(table);
                 pJointures.RemoveAt(index - 1);
                 pTables.RemoveAt(index);
             }
@@ -508,7 +684,16 @@ namespace SQLUtility.App
                 else if (jointure.Origine == OrigineJointure.Manuelle) type += " (manuelle)";
                 grilleTables.Rows.Add(table.Alias, nom, type, jointure.DescriptionConditions);
             }
-            boutonModifierJointure.Enabled = boutonRetirerTable.Enabled = pTables.Count > 1;
+            foreach (CritereExistence existence in pExistences)
+            {
+                TableInfo info = existence.Table.Table;
+                string nom = info.Schema + "." + info.Nom + (string.IsNullOrEmpty(info.Libelle) ? string.Empty : " — " + info.Libelle);
+                grilleTables.Rows.Add(existence.Table.Alias, nom, existence.Negation ? "NOT EXISTS (aucune ligne liée)" : "EXISTS (au moins une ligne liée)",
+                    existence.DescriptionConditions);
+            }
+            boutonModifierJointure.Enabled = boutonRetirerTable.Enabled = pTables.Count > 1 || pExistences.Count > 0;
+            // Les colonnes copiables dépendent des tables de la consultation.
+            if (radioLotCopier.Checked) RemplirLot();
         }
 
         /// <summary>
@@ -744,7 +929,10 @@ namespace SQLUtility.App
                 return;
             }
 
-            ResultatGeneration resultat = onglets.SelectedTab == ongletConsulter ? GenererConsultation() : GenererLigne();
+            ResultatGeneration resultat;
+            if (onglets.SelectedTab == ongletConsulter) resultat = GenererConsultation();
+            else if (onglets.SelectedTab == ongletLot) resultat = GenererLot();
+            else resultat = GenererLigne();
             apercuSql.Text = resultat.Sql ?? string.Empty;
             Erreurs(resultat.Erreurs, resultat.Avertissements);
         }
@@ -761,7 +949,7 @@ namespace SQLUtility.App
             List<CritereTri> tris = TrisSaisis(colonnes);
             List<CritereFiltre> criteres = CriteresSaisis();
 
-            if (pJointures.Count == 0)
+            if (pJointures.Count == 0 && pExistences.Count == 0)
             {
                 RequeteConsultation simple = new RequeteConsultation();
                 simple.Table = pStructure.Table;
@@ -777,6 +965,7 @@ namespace SQLUtility.App
 
             RequeteJointure requete = new RequeteJointure(pTables[0]);
             requete.Jointures.AddRange(pJointures);
+            requete.Existences.AddRange(ExistencesSaisies());
             requete.Colonnes.AddRange(colonnes);
             requete.Tris.AddRange(tris);
             requete.Criteres.AddRange(criteres);
@@ -842,6 +1031,7 @@ namespace SQLUtility.App
         {
             RequeteJointure baseRequete = new RequeteJointure(pTables[0]);
             baseRequete.Jointures.AddRange(pJointures);
+            baseRequete.Existences.AddRange(ExistencesSaisies());
             baseRequete.Criteres.AddRange(CriteresSaisis());
             baseRequete.Limite = (int)champLimite.Value;
             RequeteAgregat requete = new RequeteAgregat(baseRequete);
@@ -922,6 +1112,15 @@ namespace SQLUtility.App
         /// <summary>Filtres sur les lignes (WHERE) ; ceux qui portent sur un calcul vont au HAVING.</summary>
         private List<CritereFiltre> CriteresSaisis()
         {
+            return CriteresDesFiltres(false);
+        }
+
+        /// <summary>
+        /// Filtres sur les lignes : ceux des tables de la requête (A, B...), ou, avec
+        /// <paramref name="sousRequetes"/>, ceux des tables des conditions d'existence (S1...).
+        /// </summary>
+        private List<CritereFiltre> CriteresDesFiltres(bool sousRequetes)
+        {
             List<CritereFiltre> criteres = new List<CritereFiltre>();
             foreach (DataGridViewRow ligne in grilleFiltres.Rows)
             {
@@ -929,6 +1128,7 @@ namespace SQLUtility.App
                 ColonneRequete colonne = ColonneDuFiltre(ligne);
                 string operateur = ligne.Cells[colFiltreOperateur.Index].Value as string;
                 if (colonne == null || operateur == null || !pOperateurs.ContainsKey(operateur)) continue;
+                if (EstTableExistence(colonne.Table) != sousRequetes) continue;
 
                 CritereFiltre critere = new CritereFiltre();
                 critere.Table = colonne.Table;
@@ -1053,6 +1253,222 @@ namespace SQLUtility.App
             FormatDate format;
             if (libelle != null && pFormats.TryGetValue(libelle, out format)) return format;
             return null;
+        }
+
+        // ----------------------------------------------------------------- Traitement par lot (niveau 4, EF-49)
+
+        private void ModeLot_CheckedChanged(object sender, EventArgs e)
+        {
+            if (!((RadioButton)sender).Checked) return; // Un seul passage : le bouton qui s'active.
+            RemplirLot();
+            Regenerer();
+        }
+
+        private void boutonSourceLot_Click(object sender, EventArgs e)
+        {
+            if (pStructure == null)
+            {
+                Info("Chargez d'abord la table à modifier (A).");
+                return;
+            }
+            StructureTable structure = DecrireTableSaisie("où prendre les valeurs");
+            if (structure == null) return;
+
+            SourceMiseAJour source = new SourceMiseAJour(structure);
+            using (FormJointure dialogue = new FormJointure(new List<TableRequete> { pTables[0] }, source.Table, null, ModeLiaison.Source))
+            {
+                if (dialogue.ShowDialog(this) != DialogResult.OK) return;
+                source.Conditions.AddRange(dialogue.Jointure.Conditions);
+            }
+            pSourceLot = source;
+            RemplirLot();
+            Regenerer();
+        }
+
+        private void boutonCibleLot_Click(object sender, EventArgs e)
+        {
+            if (pStructure == null)
+            {
+                Info("Chargez d'abord la table d'où viennent les lignes (A) et filtrez-la dans l'onglet Consulter.");
+                return;
+            }
+            StructureTable structure = DecrireTableSaisie("où copier les lignes");
+            if (structure == null) return;
+            pCibleLot = structure;
+            RemplirLot();
+            Regenerer();
+        }
+
+        /// <summary>
+        /// Grille du lot. Modifier : colonnes de A, valeur fixe ou colonne de la source.
+        /// Copier : colonnes de la cible, associées aux colonnes de la consultation de même nom.
+        /// Supprimer : pas de saisie.
+        /// </summary>
+        private void RemplirLot()
+        {
+            bool modifier = radioLotModifier.Checked;
+            bool copier = radioLotCopier.Checked;
+            boutonSourceLot.Visible = modifier;
+            boutonCibleLot.Visible = copier;
+            grilleLot.Visible = modifier || copier;
+            colLSource.HeaderText = copier ? "Prendre la valeur de (consultation)" : "Prendre la valeur de (table source)";
+
+            bool etat = pRemplissage;
+            pRemplissage = true;
+            try
+            {
+                grilleLot.Rows.Clear();
+                colLSource.Items.Clear();
+                colLSource.Items.Add(string.Empty);
+                pColonnesSourceLot.Clear();
+                pColonnesCopieLot.Clear();
+
+                IEnumerable<ColonneInfo> cibles = null;
+                Dictionary<ColonneInfo, string> associations = new Dictionary<ColonneInfo, string>();
+                if (modifier && pStructure != null)
+                {
+                    cibles = pStructure.Colonnes;
+                    if (pSourceLot != null)
+                    {
+                        foreach (ColonneInfo colonne in pSourceLot.Table.Structure.Colonnes)
+                        {
+                            string libelle = pSourceLot.Table.Alias + "." + (string.IsNullOrEmpty(colonne.Libelle) ? colonne.Nom : colonne.Nom + " — " + colonne.Libelle);
+                            pColonnesSourceLot[libelle] = colonne;
+                            colLSource.Items.Add(libelle);
+                        }
+                    }
+                }
+                else if (copier && pCibleLot != null)
+                {
+                    cibles = pCibleLot.Colonnes;
+                    List<ColonneRequete> sources = new List<ColonneRequete>();
+                    foreach (TableRequete table in pTables)
+                    {
+                        foreach (ColonneInfo colonne in table.Structure.Colonnes)
+                        {
+                            string libelle = table.Alias + "." + (string.IsNullOrEmpty(colonne.Libelle) ? colonne.Nom : colonne.Nom + " — " + colonne.Libelle);
+                            ColonneRequete source = new ColonneRequete(table, colonne);
+                            pColonnesCopieLot[libelle] = source;
+                            colLSource.Items.Add(libelle);
+                            sources.Add(source);
+                        }
+                    }
+                    // Zones Atlas de même nom : association proposée d'office.
+                    foreach (KeyValuePair<ColonneInfo, ColonneRequete> paire in GenerateurSqlLot.AssocierParNom(cibles, sources))
+                    {
+                        foreach (KeyValuePair<string, ColonneRequete> entree in pColonnesCopieLot)
+                            if (entree.Value.Table == paire.Value.Table && entree.Value.Colonne == paire.Value.Colonne) associations[paire.Key] = entree.Key;
+                    }
+                }
+
+                if (cibles != null)
+                {
+                    foreach (ColonneInfo colonne in cibles)
+                    {
+                        string source;
+                        if (!associations.TryGetValue(colonne, out source)) source = string.Empty;
+                        int index = grilleLot.Rows.Add(colonne.Nom, colonne.Libelle, TypesSql.Libelle(colonne.TypeDonnee, colonne.Longueur, colonne.Echelle),
+                            source, string.Empty, false, FormatPropose(colonne));
+                        DataGridViewRow ligne = grilleLot.Rows[index];
+                        ligne.Tag = colonne;
+                        if (!colonne.AccepteNull) ligne.Cells[colLNull.Index].ReadOnly = true;
+                        if (TypesSql.Categorie(colonne.TypeDonnee) == CategorieType.NonPrisEnCharge) ligne.ReadOnly = true;
+                    }
+                }
+            }
+            finally
+            {
+                pRemplissage = etat;
+            }
+
+            if (radioLotSupprimer.Checked)
+            {
+                etiquetteSourceLot.Text = string.Empty;
+                etiquetteAideLot.Text = "Supprime TOUTES les lignes de la table A retenues par les filtres et les conditions d'existence de l'onglet "
+                    + "Consulter. Le nombre de lignes est compté et confirmé avant l'exécution.";
+            }
+            else if (modifier)
+            {
+                etiquetteSourceLot.Text = pSourceLot == null
+                    ? "Table source : aucune (valeurs fixes seulement)."
+                    : "Table source : " + pSourceLot.Table.Table.Nom + " (" + SourceMiseAJour.AliasSource + "), reliée par "
+                      + DescriptionLiens(pSourceLot.Conditions) + ".";
+                etiquetteAideLot.Text = "Modifie les lignes de A retenues dans l'onglet Consulter. Pour chaque colonne : une valeur fixe, NULL, "
+                    + "ou une colonne de la table source (choisie dans la liste « Table » en haut). Colonne laissée vide = inchangée.";
+            }
+            else
+            {
+                etiquetteSourceLot.Text = pCibleLot == null
+                    ? "Table cible : choisissez-la dans la liste « Table » en haut, puis cliquez sur le bouton."
+                    : "Table cible : " + pCibleLot.Table.Schema + "." + pCibleLot.Table.Nom + " — colonnes de même nom associées d'office.";
+                etiquetteAideLot.Text = "Copie dans la table cible les lignes de la consultation (tables, filtres et conditions de l'onglet Consulter). "
+                    + "Pour chaque colonne cible : une colonne de la consultation, une valeur fixe ou NULL ; vide = valeur par défaut.";
+            }
+        }
+
+        private static string DescriptionLiens(List<ConditionJointure> conditions)
+        {
+            List<string> textes = new List<string>();
+            foreach (ConditionJointure condition in conditions)
+                textes.Add(SourceMiseAJour.AliasSource + "." + condition.ColonneJointe.Nom + " = A." + condition.ColonneLiee.Nom);
+            return string.Join(" ET ", textes);
+        }
+
+        private ResultatGeneration GenererLot()
+        {
+            RequeteJointure lignes = new RequeteJointure(pTables[0]);
+            lignes.Jointures.AddRange(pJointures);
+            lignes.Existences.AddRange(ExistencesSaisies());
+            lignes.Criteres.AddRange(CriteresSaisis());
+            lignes.Distinct = caseDistinct.Checked;
+            lignes.Limite = (int)champLimite.Value;
+
+            ResultatGeneration resultat;
+            if (radioLotSupprimer.Checked)
+            {
+                resultat = GenerateurSqlLot.ConstruireDelete(lignes);
+            }
+            else if (radioLotModifier.Checked)
+            {
+                List<AffectationLot> affectations = new List<AffectationLot>();
+                foreach (DataGridViewRow ligne in grilleLot.Rows)
+                {
+                    ColonneInfo cible = (ColonneInfo)ligne.Tag;
+                    string source = ligne.Cells[colLSource.Index].Value as string;
+                    string valeur = Convert.ToString(ligne.Cells[colLValeur.Index].Value);
+                    bool estNull = true.Equals(ligne.Cells[colLNull.Index].Value);
+                    ColonneInfo colonneSource;
+                    if (!string.IsNullOrEmpty(source) && pColonnesSourceLot.TryGetValue(source, out colonneSource))
+                        affectations.Add(new AffectationLot(cible, colonneSource));
+                    else if (estNull || valeur.Length > 0)
+                        affectations.Add(new AffectationLot(cible, valeur, estNull, FormatChoisi(ligne.Cells[colLFormat.Index].Value)));
+                }
+                resultat = GenerateurSqlLot.ConstruireUpdate(lignes, affectations, pSourceLot);
+            }
+            else
+            {
+                if (pCibleLot == null)
+                    return new ResultatGeneration(null, new[] { "Choisissez la table cible (liste « Table » en haut, puis « Copier vers la table choisie en haut… »)." });
+                List<CorrespondanceInsert> correspondances = new List<CorrespondanceInsert>();
+                foreach (DataGridViewRow ligne in grilleLot.Rows)
+                {
+                    ColonneInfo cible = (ColonneInfo)ligne.Tag;
+                    string source = ligne.Cells[colLSource.Index].Value as string;
+                    string valeur = Convert.ToString(ligne.Cells[colLValeur.Index].Value);
+                    bool estNull = true.Equals(ligne.Cells[colLNull.Index].Value);
+                    ColonneRequete colonneSource;
+                    if (!string.IsNullOrEmpty(source) && pColonnesCopieLot.TryGetValue(source, out colonneSource))
+                        correspondances.Add(new CorrespondanceInsert(cible, colonneSource));
+                    else if (estNull || valeur.Length > 0)
+                        correspondances.Add(new CorrespondanceInsert(cible, valeur, estNull, FormatChoisi(ligne.Cells[colLFormat.Index].Value)));
+                }
+                resultat = GenerateurSqlLot.ConstruireInsertSelect(pCibleLot.Table, correspondances, lignes);
+            }
+
+            if (!ModeAgregat()) return resultat;
+            List<string> avertissements = new List<string>(resultat.Avertissements);
+            avertissements.Add("Les calculs et regroupements de l'onglet Consulter ne s'appliquent pas au traitement par lot.");
+            return new ResultatGeneration(resultat.Sql, new List<string>(resultat.Erreurs), avertissements);
         }
 
         // ----------------------------------------------------------------- Sortie
