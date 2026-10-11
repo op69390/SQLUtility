@@ -77,6 +77,7 @@
     <Compile Include="Assistant\ModeleAgregat.cs" />
     <Compile Include="Assistant\GenerateurSqlAgregat.cs" />
     <Compile Include="Assistant\GenerateurSqlLot.cs" />
+    <Compile Include="Assistant\EtapeRequete.cs" />
     <Compile Include="Optimisation\Severite.cs" />
     <Compile Include="Optimisation\ResultatAnalyse.cs" />
     <Compile Include="Optimisation\IRegleAnalyse.cs" />

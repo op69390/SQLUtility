@@ -143,10 +143,32 @@ namespace SQLUtility.Core.Assistant
         }
 
         public ResultatGeneration(string sql, IList<string> erreurs, IList<string> avertissements)
+            : this(sql, erreurs, avertissements, null)
+        {
+        }
+
+        public ResultatGeneration(string sql, IList<string> erreurs, IList<string> avertissements, IList<ColonneInfo> colonnes)
         {
             Erreurs = new ReadOnlyCollection<string>(erreurs ?? new List<string>());
             Avertissements = new ReadOnlyCollection<string>(avertissements ?? new List<string>());
+            Colonnes = new ReadOnlyCollection<ColonneInfo>(colonnes ?? new List<ColonneInfo>());
             Sql = Erreurs.Count == 0 ? sql : null;
+        }
+
+        /// <summary>
+        /// Colonnes du résultat d'une consultation (noms uniques, types, libellés), pour en
+        /// faire une étape réutilisable (WITH). Vide pour un ajout, une modification, une suppression.
+        /// </summary>
+        public IReadOnlyList<ColonneInfo> Colonnes { get; }
+
+        /// <summary>Même résultat, avec d'autres erreurs ou avertissements (colonnes conservées).</summary>
+        public ResultatGeneration Completer(IList<string> erreursEnPlus, IList<string> avertissementsEnPlus)
+        {
+            List<string> erreurs = new List<string>(Erreurs);
+            if (erreursEnPlus != null) erreurs.AddRange(erreursEnPlus);
+            List<string> avertissements = new List<string>(Avertissements);
+            if (avertissementsEnPlus != null) avertissements.AddRange(avertissementsEnPlus);
+            return new ResultatGeneration(Sql, erreurs, avertissements, new List<ColonneInfo>(Colonnes));
         }
 
         /// <summary>Points d'attention qui n'empêchent pas la génération (ex. lignes multipliées).</summary>

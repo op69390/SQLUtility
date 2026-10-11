@@ -35,6 +35,7 @@ namespace SQLUtility.Core.Assistant
             List<string> selection = new List<string>();
             List<string> libelles = new List<string>();
             List<string> regroupements = new List<string>();
+            List<ColonneInfo> colonnesResultat = new List<ColonneInfo>();
             Dictionary<ElementAgregat, string> noms = new Dictionary<ElementAgregat, string>();
             HashSet<string> nomsPris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (ElementAgregat element in requete.Elements)
@@ -49,6 +50,7 @@ namespace SQLUtility.Core.Assistant
                 selection.Add(colonneBrute && string.Equals(nom, element.Colonne.Nom, StringComparison.OrdinalIgnoreCase)
                     ? expression : expression + " AS " + GenerateurSqlSimple.NomSql(nom));
                 libelles.Add(LibelleElement(element));
+                colonnesResultat.Add(ColonneResultat(element, nom));
                 if (element.Fonction == FonctionAgregat.Regrouper) regroupements.Add(expression);
             }
 
@@ -91,7 +93,42 @@ namespace SQLUtility.Core.Assistant
             if (tris.Count > 0) sql.AppendLine().Append("ORDER BY ").Append(string.Join(", ", tris));
             GenerateurSqlJointure.AjouterLimite(sql, baseRequete.Limite);
 
-            return new ResultatGeneration(sql.ToString(), erreurs, avertissements);
+            return new ResultatGeneration(sql.ToString(), erreurs, avertissements, colonnesResultat);
+        }
+
+        /// <summary>
+        /// Type du résultat d'un élément (EF-50), selon les règles DB2 for i : COUNT = INTEGER,
+        /// SUM d'un décimal = DECIMAL(31, échelle), année / mois = INTEGER, jour = DATE.
+        /// </summary>
+        private static ColonneInfo ColonneResultat(ElementAgregat element, string nom)
+        {
+            string libelle = LibelleElement(element);
+            switch (element.Fonction)
+            {
+                case FonctionAgregat.NombreLignes:
+                case FonctionAgregat.Nombre:
+                case FonctionAgregat.NombreDistinct:
+                    return new ColonneInfo { Nom = nom, NomSysteme = nom, TypeDonnee = "INTEGER", Libelle = libelle };
+                case FonctionAgregat.Somme:
+                    return EstEntier(element.Colonne)
+                        ? new ColonneInfo { Nom = nom, NomSysteme = nom, TypeDonnee = "BIGINT", Libelle = libelle, AccepteNull = true }
+                        : new ColonneInfo { Nom = nom, NomSysteme = nom, TypeDonnee = "DECIMAL", Longueur = 31, Echelle = element.Colonne.Echelle, Libelle = libelle, AccepteNull = true };
+                case FonctionAgregat.Moyenne:
+                    return new ColonneInfo { Nom = nom, NomSysteme = nom, TypeDonnee = "DECIMAL", Longueur = 31,
+                        Echelle = EstEntier(element.Colonne) ? 2 : Math.Max(element.Colonne.Echelle, 2), Libelle = libelle, AccepteNull = true };
+                case FonctionAgregat.Regrouper:
+                    if (element.Periode == PeriodeDate.Annee || element.Periode == PeriodeDate.Mois)
+                        return new ColonneInfo { Nom = nom, NomSysteme = nom, TypeDonnee = "INTEGER", Libelle = libelle, AccepteNull = true };
+                    if (element.Periode == PeriodeDate.Jour)
+                        return new ColonneInfo { Nom = nom, NomSysteme = nom, TypeDonnee = "DATE", Libelle = libelle, AccepteNull = true };
+                    return ComposeurEtapes.Copier(element.Colonne, nom);
+                default:
+                    // Minimum / maximum : type de la colonne (une date Atlas reste une date Atlas).
+                    ColonneInfo copie = ComposeurEtapes.Copier(element.Colonne, nom);
+                    copie.Libelle = libelle;
+                    copie.AccepteNull = true;
+                    return copie;
+            }
         }
 
         // ------------------------------------------------------------------ Expressions

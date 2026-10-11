@@ -18,6 +18,12 @@
         /// <summary>Type : "TABLE", "VIEW", ...</summary>
         public string Type { get; set; }
 
+        /// <summary>SCHEMA.TABLE, ou le nom seul pour une table sans schéma (étape d'une requête WITH).</summary>
+        public string NomQualifie
+        {
+            get { return string.IsNullOrEmpty(Schema) ? Nom : Schema + "." + Nom; }
+        }
+
         public override string ToString()
         {
             return Nom;

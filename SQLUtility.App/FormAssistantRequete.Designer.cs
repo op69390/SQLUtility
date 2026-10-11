@@ -24,6 +24,8 @@
             this.listeTables = new System.Windows.Forms.ComboBox();
             this.boutonChargerTable = new System.Windows.Forms.Button();
             this.boutonJoindre = new System.Windows.Forms.Button();
+            this.boutonEtape = new System.Windows.Forms.Button();
+            this.boutonRetirerEtape = new System.Windows.Forms.Button();
             this.panneauTables = new System.Windows.Forms.Panel();
             this.etiquetteTables = new System.Windows.Forms.Label();
             this.grilleTables = new System.Windows.Forms.DataGridView();
@@ -136,6 +138,8 @@
             // panneauTable
             //
             this.panneauTable.Controls.Add(this.etiquetteInfoTable);
+            this.panneauTable.Controls.Add(this.boutonRetirerEtape);
+            this.panneauTable.Controls.Add(this.boutonEtape);
             this.panneauTable.Controls.Add(this.boutonJoindre);
             this.panneauTable.Controls.Add(this.boutonChargerTable);
             this.panneauTable.Controls.Add(this.listeTables);
@@ -209,6 +213,29 @@
             this.boutonJoindre.Text = "Joindre cette table…";
             this.boutonJoindre.UseVisualStyleBackColor = true;
             this.boutonJoindre.Click += new System.EventHandler(this.boutonJoindre_Click);
+            //
+            // boutonEtape
+            //
+            this.boutonEtape.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.boutonEtape.Location = new System.Drawing.Point(862, 8);
+            this.boutonEtape.Name = "boutonEtape";
+            this.boutonEtape.Size = new System.Drawing.Size(112, 25);
+            this.boutonEtape.TabIndex = 6;
+            this.boutonEtape.Text = "En faire une étape";
+            this.boutonEtape.UseVisualStyleBackColor = true;
+            this.boutonEtape.Click += new System.EventHandler(this.boutonEtape_Click);
+            //
+            // boutonRetirerEtape
+            //
+            this.boutonRetirerEtape.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.boutonRetirerEtape.Enabled = false;
+            this.boutonRetirerEtape.Location = new System.Drawing.Point(862, 36);
+            this.boutonRetirerEtape.Name = "boutonRetirerEtape";
+            this.boutonRetirerEtape.Size = new System.Drawing.Size(112, 23);
+            this.boutonRetirerEtape.TabIndex = 7;
+            this.boutonRetirerEtape.Text = "Retirer l'étape";
+            this.boutonRetirerEtape.UseVisualStyleBackColor = true;
+            this.boutonRetirerEtape.Click += new System.EventHandler(this.boutonRetirerEtape_Click);
             //
             // panneauTables
             //
@@ -507,7 +534,7 @@
             this.etiquetteInfoTable.ForeColor = System.Drawing.SystemColors.GrayText;
             this.etiquetteInfoTable.Location = new System.Drawing.Point(12, 40);
             this.etiquetteInfoTable.Name = "etiquetteInfoTable";
-            this.etiquetteInfoTable.Size = new System.Drawing.Size(960, 18);
+            this.etiquetteInfoTable.Size = new System.Drawing.Size(844, 18);
             this.etiquetteInfoTable.TabIndex = 5;
             this.etiquetteInfoTable.Text = "Choisissez un schéma puis une table.";
             //
@@ -1130,6 +1157,8 @@
         private System.Windows.Forms.ComboBox listeTables;
         private System.Windows.Forms.Button boutonChargerTable;
         private System.Windows.Forms.Button boutonJoindre;
+        private System.Windows.Forms.Button boutonEtape;
+        private System.Windows.Forms.Button boutonRetirerEtape;
         private System.Windows.Forms.Panel panneauTables;
         private System.Windows.Forms.Label etiquetteTables;
         private System.Windows.Forms.DataGridView grilleTables;

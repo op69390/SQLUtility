@@ -39,6 +39,10 @@ namespace SQLUtility.App
         private readonly Dictionary<string, ColonneInfo> pColonnesSourceLot = new Dictionary<string, ColonneInfo>();
         private readonly Dictionary<string, ColonneRequete> pColonnesCopieLot = new Dictionary<string, ColonneRequete>();
 
+        // Niveau 4b (EF-50) : étapes enregistrées (WITH) ; pendant leur création, ni tri ni limite.
+        private readonly List<EtapeRequete> pEtapes = new List<EtapeRequete>();
+        private bool pPourEtape;
+
         private readonly Dictionary<string, ColonneRequete> pColonnesParLibelle = new Dictionary<string, ColonneRequete>();
         private readonly Dictionary<string, OperateurFiltre> pOperateurs = new Dictionary<string, OperateurFiltre>();
         private readonly Dictionary<string, FormatDate> pFormats = new Dictionary<string, FormatDate>();
@@ -205,6 +209,7 @@ namespace SQLUtility.App
                 listeTables.BeginUpdate();
                 foreach (TableInfo table in tables) listeTables.Items.Add(new ElementTable(table));
                 listeTables.EndUpdate();
+                AjouterEtapesALaListe();
                 Info(tables.Count + " table(s) dans " + schema + " : tapez le début du nom.");
             }
             catch (Exception ex)
@@ -247,7 +252,7 @@ namespace SQLUtility.App
             Cursor = Cursors.WaitCursor;
             try
             {
-                pStructure = pProvider.DecrireTable(pProfil, table);
+                pStructure = DecrireTable(table);
                 RemplirGrilles();
                 Info(DescriptionTable(pStructure));
             }
@@ -285,7 +290,7 @@ namespace SQLUtility.App
         private static string DescriptionTable(StructureTable structure)
         {
             TableInfo table = structure.Table;
-            string texte = table.Schema + "." + table.Nom;
+            string texte = table.NomQualifie;
             if (!string.IsNullOrEmpty(table.Libelle)) texte += " — " + table.Libelle;
             texte += " — " + structure.Colonnes.Count + " colonne(s) — ";
             texte += structure.CleIdentification != null
@@ -394,7 +399,7 @@ namespace SQLUtility.App
             Cursor = Cursors.WaitCursor;
             try
             {
-                structure = pProvider.DecrireTable(pProfil, table);
+                structure = DecrireTable(table);
             }
             catch (Exception ex)
             {
@@ -582,7 +587,7 @@ namespace SQLUtility.App
             Cursor = Cursors.WaitCursor;
             try
             {
-                return pProvider.DecrireTable(pProfil, table);
+                return DecrireTable(table);
             }
             catch (Exception ex)
             {
@@ -672,7 +677,7 @@ namespace SQLUtility.App
             for (int i = 0; i < pTables.Count; i++)
             {
                 TableRequete table = pTables[i];
-                string nom = table.Table.Schema + "." + table.Table.Nom + (string.IsNullOrEmpty(table.Table.Libelle) ? string.Empty : " — " + table.Table.Libelle);
+                string nom = table.Table.NomQualifie + (string.IsNullOrEmpty(table.Table.Libelle) ? string.Empty : " — " + table.Table.Libelle);
                 if (i == 0)
                 {
                     grilleTables.Rows.Add(table.Alias, nom, "table de départ", string.Empty);
@@ -687,7 +692,7 @@ namespace SQLUtility.App
             foreach (CritereExistence existence in pExistences)
             {
                 TableInfo info = existence.Table.Table;
-                string nom = info.Schema + "." + info.Nom + (string.IsNullOrEmpty(info.Libelle) ? string.Empty : " — " + info.Libelle);
+                string nom = info.NomQualifie + (string.IsNullOrEmpty(info.Libelle) ? string.Empty : " — " + info.Libelle);
                 grilleTables.Rows.Add(existence.Table.Alias, nom, existence.Negation ? "NOT EXISTS (aucune ligne liée)" : "EXISTS (au moins une ligne liée)",
                     existence.DescriptionConditions);
             }
@@ -833,6 +838,11 @@ namespace SQLUtility.App
         private void boutonChargerLigne_Click(object sender, EventArgs e)
         {
             if (pStructure == null) return;
+            if (EstEtape(pStructure.Table))
+            {
+                Erreurs(new[] { "Une étape n'a pas de lignes à relire ni à modifier : chargez une vraie table." });
+                return;
+            }
             List<string> erreurs = new List<string>();
             IdentificationLigne identification = Identification(erreurs);
             if (identification == null || erreurs.Count > 0)
@@ -929,10 +939,7 @@ namespace SQLUtility.App
                 return;
             }
 
-            ResultatGeneration resultat;
-            if (onglets.SelectedTab == ongletConsulter) resultat = GenererConsultation();
-            else if (onglets.SelectedTab == ongletLot) resultat = GenererLot();
-            else resultat = GenererLigne();
+            ResultatGeneration resultat = Generer();
             apercuSql.Text = resultat.Sql ?? string.Empty;
             Erreurs(resultat.Erreurs, resultat.Avertissements);
         }
@@ -947,6 +954,7 @@ namespace SQLUtility.App
 
             List<ColonneRequete> colonnes = new List<ColonneRequete>();
             List<CritereTri> tris = TrisSaisis(colonnes);
+            if (pPourEtape) tris.Clear(); // Ni tri ni limite dans une étape : elle sert de table.
             List<CritereFiltre> criteres = CriteresSaisis();
 
             if (pJointures.Count == 0 && pExistences.Count == 0)
@@ -956,7 +964,7 @@ namespace SQLUtility.App
                 simple.ToutesColonnes = new List<ColonneInfo>(pStructure.Colonnes);
                 simple.Distinct = caseDistinct.Checked;
                 simple.AvecRrn = caseRrn.Checked;
-                simple.Limite = (int)champLimite.Value;
+                simple.Limite = pPourEtape ? 0 : (int)champLimite.Value;
                 foreach (ColonneRequete colonne in colonnes) simple.Colonnes.Add(colonne.Colonne);
                 simple.Tris.AddRange(tris);
                 simple.Criteres.AddRange(criteres);
@@ -970,14 +978,12 @@ namespace SQLUtility.App
             requete.Tris.AddRange(tris);
             requete.Criteres.AddRange(criteres);
             requete.Distinct = caseDistinct.Checked;
-            requete.Limite = (int)champLimite.Value;
+            requete.Limite = pPourEtape ? 0 : (int)champLimite.Value;
             ResultatGeneration resultat = GenerateurSqlJointure.ConstruireSelect(requete);
             if (!caseRrn.Checked) return resultat;
 
             // RRN() n'a de sens que pour une table seule : on le signale sans bloquer.
-            List<string> avertissements = new List<string>(resultat.Avertissements);
-            avertissements.Add("Le n° d'enregistrement (RRN) n'est proposé que pour une table seule : option ignorée.");
-            return new ResultatGeneration(resultat.Sql, new List<string>(resultat.Erreurs), avertissements);
+            return resultat.Completer(null, new[] { "Le n° d'enregistrement (RRN) n'est proposé que pour une table seule : option ignorée." });
         }
 
         /// <summary>Colonnes cochées (remplit <paramref name="colonnes"/>) et tris ordonnés par rang.</summary>
@@ -1033,7 +1039,7 @@ namespace SQLUtility.App
             baseRequete.Jointures.AddRange(pJointures);
             baseRequete.Existences.AddRange(ExistencesSaisies());
             baseRequete.Criteres.AddRange(CriteresSaisis());
-            baseRequete.Limite = (int)champLimite.Value;
+            baseRequete.Limite = pPourEtape ? 0 : (int)champLimite.Value;
             RequeteAgregat requete = new RequeteAgregat(baseRequete);
 
             List<KeyValuePair<int, TriAgregat>> tris = new List<KeyValuePair<int, TriAgregat>>();
@@ -1074,7 +1080,8 @@ namespace SQLUtility.App
                 int comparaison = a.Value.Key.CompareTo(b.Value.Key);
                 return comparaison != 0 ? comparaison : a.Key.CompareTo(b.Key);
             });
-            foreach (KeyValuePair<int, KeyValuePair<int, TriAgregat>> tri in ordonnes) requete.Tris.Add(tri.Value.Value);
+            if (!pPourEtape)
+                foreach (KeyValuePair<int, KeyValuePair<int, TriAgregat>> tri in ordonnes) requete.Tris.Add(tri.Value.Value);
 
             foreach (DataGridViewRow ligne in grilleFiltres.Rows)
             {
@@ -1094,10 +1101,10 @@ namespace SQLUtility.App
             }
 
             ResultatGeneration resultat = GenerateurSqlAgregat.ConstruireSelect(requete);
-            List<string> avertissements = new List<string>(resultat.Avertissements);
+            List<string> avertissements = new List<string>();
             if (caseDistinct.Checked) avertissements.Add("DISTINCT est sans objet avec un regroupement : option ignorée.");
             if (caseRrn.Checked) avertissements.Add("Le n° d'enregistrement (RRN) n'a pas de sens par groupe : option ignorée.");
-            return new ResultatGeneration(resultat.Sql, new List<string>(resultat.Erreurs), avertissements);
+            return resultat.Completer(null, avertissements);
         }
 
         /// <summary>Calcul visé par un filtre (HAVING), ou null pour un filtre sur les lignes (WHERE).</summary>
@@ -1255,6 +1262,141 @@ namespace SQLUtility.App
             return null;
         }
 
+        /// <summary>
+        /// SQL de l'onglet actif. Une consultation qui utilise des étapes est précédée de leur
+        /// WITH ; une étape ne peut pas être modifiée (onglets Ligne et Traitement par lot).
+        /// </summary>
+        private ResultatGeneration Generer()
+        {
+            List<string> etapesUtilisees = EtapesUtilisees();
+            if (onglets.SelectedTab == ongletConsulter)
+            {
+                ResultatGeneration resultat = GenererConsultation();
+                if (resultat.Sql == null || etapesUtilisees.Count == 0) return resultat;
+                string sql = ComposeurEtapes.Composer(ComposeurEtapes.Necessaires(etapesUtilisees, pEtapes), resultat.Sql);
+                return new ResultatGeneration(sql, new List<string>(resultat.Erreurs), new List<string>(resultat.Avertissements), new List<ColonneInfo>(resultat.Colonnes));
+            }
+            if (etapesUtilisees.Count > 0 || (pSourceLot != null && radioLotModifier.Checked && EstEtape(pSourceLot.Table.Table))
+                || (pCibleLot != null && radioLotCopier.Checked && EstEtape(pCibleLot.Table)))
+                return new ResultatGeneration(null, new[] { "Les étapes (" + string.Join(", ", etapesUtilisees.Count > 0 ? etapesUtilisees : new List<string> { "WITH" })
+                    + ") servent aux consultations seulement : chargez une vraie table pour ajouter, modifier, supprimer ou copier." });
+            return onglets.SelectedTab == ongletLot ? GenererLot() : GenererLigne();
+        }
+
+        // ----------------------------------------------------------------- Étapes (niveau 4b, EF-50)
+
+        /// <summary>
+        /// Enregistre la consultation en cours comme étape (ETAPE1...), sans tri ni limite, puis
+        /// la charge comme table A : on peut alors la joindre, la filtrer ou la regrouper.
+        /// </summary>
+        private void boutonEtape_Click(object sender, EventArgs e)
+        {
+            if (pStructure == null || onglets.SelectedTab != ongletConsulter)
+            {
+                Info("Une étape se crée depuis l'onglet Consulter, à partir d'une consultation valide.");
+                return;
+            }
+            ResultatGeneration resultat;
+            pPourEtape = true;
+            try
+            {
+                resultat = GenererConsultation();
+            }
+            finally
+            {
+                pPourEtape = false;
+            }
+            if (!resultat.EstValide || resultat.Colonnes.Count == 0)
+            {
+                Info("Corrigez d'abord la consultation : " + string.Join(" ", resultat.Erreurs));
+                return;
+            }
+
+            string nom = "ETAPE" + (pEtapes.Count + 1);
+            string libelle = DescriptionEtape();
+            EtapeRequete etape = new EtapeRequete(nom, libelle, resultat.Sql, resultat.Colonnes, EtapesUtilisees());
+            pEtapes.Add(etape);
+            AjouterEtapesALaListe();
+            boutonRetirerEtape.Enabled = true;
+
+            listeTables.Text = nom;
+            ChargerTable();
+            Info(nom + " créée (" + libelle + ") et chargée comme table A : joignez-la, filtrez-la ou regroupez-la. "
+                + "Elle sera placée en tête du SQL (WITH).");
+        }
+
+        private void boutonRetirerEtape_Click(object sender, EventArgs e)
+        {
+            if (pEtapes.Count == 0) return;
+            EtapeRequete derniere = pEtapes[pEtapes.Count - 1];
+            if (EtapesUtilisees().Exists(n => string.Equals(n, derniere.Nom, StringComparison.OrdinalIgnoreCase)))
+            {
+                Info(derniere.Nom + " est utilisée par la consultation en cours : chargez une autre table avant de la retirer.");
+                return;
+            }
+            pEtapes.RemoveAt(pEtapes.Count - 1);
+            for (int i = listeTables.Items.Count - 1; i >= 0; i--)
+            {
+                ElementTable element = listeTables.Items[i] as ElementTable;
+                if (element != null && string.Equals(element.Table.Nom, derniere.Nom, StringComparison.OrdinalIgnoreCase) && string.IsNullOrEmpty(element.Table.Schema))
+                    listeTables.Items.RemoveAt(i);
+            }
+            boutonRetirerEtape.Enabled = pEtapes.Count > 0;
+            Info(derniere.Nom + " retirée.");
+        }
+
+        /// <summary>Étapes en tête de la liste des tables, quel que soit le schéma choisi.</summary>
+        private void AjouterEtapesALaListe()
+        {
+            for (int i = 0; i < pEtapes.Count; i++)
+            {
+                EtapeRequete etape = pEtapes[i];
+                bool presente = false;
+                foreach (object element in listeTables.Items)
+                {
+                    ElementTable table = element as ElementTable;
+                    if (table != null && string.IsNullOrEmpty(table.Table.Schema) && string.Equals(table.Table.Nom, etape.Nom, StringComparison.OrdinalIgnoreCase))
+                        presente = true;
+                }
+                if (!presente) listeTables.Items.Insert(Math.Min(i, listeTables.Items.Count), new ElementTable(etape.Structure().Table));
+            }
+        }
+
+        /// <summary>Description par le catalogue, ou par l'étape si la table en est une.</summary>
+        private StructureTable DecrireTable(TableInfo table)
+        {
+            EtapeRequete etape = ComposeurEtapes.Trouver(table, pEtapes);
+            return etape != null ? etape.Structure() : pProvider.DecrireTable(pProfil, table);
+        }
+
+        private bool EstEtape(TableInfo table)
+        {
+            return ComposeurEtapes.EstEtape(table, pEtapes);
+        }
+
+        /// <summary>Noms des étapes utilisées par les tables de la requête (A, jointures, existences).</summary>
+        private List<string> EtapesUtilisees()
+        {
+            List<string> noms = new List<string>();
+            List<TableRequete> tables = new List<TableRequete>(pTables);
+            foreach (CritereExistence existence in pExistences) tables.Add(existence.Table);
+            foreach (TableRequete table in tables)
+                if (EstEtape(table.Table) && !noms.Contains(table.Table.Nom)) noms.Add(table.Table.Nom);
+            return noms;
+        }
+
+        /// <summary>Description courte de la consultation enregistrée : tables, et « regroupé » pour un agrégat.</summary>
+        private string DescriptionEtape()
+        {
+            List<string> noms = new List<string>();
+            foreach (TableRequete table in pTables)
+                noms.Add(string.IsNullOrEmpty(table.Table.Libelle) ? table.Table.Nom : table.Table.Nom + " (" + table.Table.Libelle + ")");
+            string description = string.Join(" + ", noms);
+            if (pExistences.Count > 0) description += ", avec conditions d'existence";
+            if (ModeAgregat()) description += ", regroupé";
+            return description;
+        }
+
         // ----------------------------------------------------------------- Traitement par lot (niveau 4, EF-49)
 
         private void ModeLot_CheckedChanged(object sender, EventArgs e)
@@ -1400,7 +1542,7 @@ namespace SQLUtility.App
             {
                 etiquetteSourceLot.Text = pCibleLot == null
                     ? "Table cible : choisissez-la dans la liste « Table » en haut, puis cliquez sur le bouton."
-                    : "Table cible : " + pCibleLot.Table.Schema + "." + pCibleLot.Table.Nom + " — colonnes de même nom associées d'office.";
+                    : "Table cible : " + pCibleLot.Table.NomQualifie + " — colonnes de même nom associées d'office.";
                 etiquetteAideLot.Text = "Copie dans la table cible les lignes de la consultation (tables, filtres et conditions de l'onglet Consulter). "
                     + "Pour chaque colonne cible : une colonne de la consultation, une valeur fixe ou NULL ; vide = valeur par défaut.";
             }
@@ -1466,9 +1608,7 @@ namespace SQLUtility.App
             }
 
             if (!ModeAgregat()) return resultat;
-            List<string> avertissements = new List<string>(resultat.Avertissements);
-            avertissements.Add("Les calculs et regroupements de l'onglet Consulter ne s'appliquent pas au traitement par lot.");
-            return new ResultatGeneration(resultat.Sql, new List<string>(resultat.Erreurs), avertissements);
+            return resultat.Completer(null, new[] { "Les calculs et regroupements de l'onglet Consulter ne s'appliquent pas au traitement par lot." });
         }
 
         // ----------------------------------------------------------------- Sortie

@@ -64,7 +64,15 @@ namespace SQLUtility.Core.Assistant
             if (tris.Count > 0) sql.AppendLine().Append("ORDER BY ").Append(string.Join(", ", tris));
             AjouterLimite(sql, requete.Limite);
 
-            return new ResultatGeneration(sql.ToString(), erreurs, avertissements);
+            // Colonnes du résultat (EF-50) : homonymes de tables différentes renommés ITNBR_2...
+            List<Catalogue.ColonneInfo> resultat = new List<Catalogue.ColonneInfo>();
+            HashSet<string> nomsPris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (ColonneRequete colonne in colonnes)
+            {
+                if (!introduites.Contains(colonne.Table)) continue;
+                resultat.Add(ComposeurEtapes.Copier(colonne.Colonne, ComposeurEtapes.NomUnique(colonne.Colonne.Nom, nomsPris)));
+            }
+            return new ResultatGeneration(sql.ToString(), erreurs, avertissements, resultat);
         }
 
         // ------------------------------------------------------------------ Parties partagées

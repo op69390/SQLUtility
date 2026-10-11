@@ -56,7 +56,7 @@ namespace SQLUtility.App
             InitializeComponent();
 
             TableInfo table = nouvelle.Table;
-            string designation = nouvelle.Alias + " — " + table.Schema + "." + table.Nom
+            string designation = nouvelle.Alias + " — " + table.NomQualifie
                 + (string.IsNullOrEmpty(table.Libelle) ? string.Empty : " (" + table.Libelle + ")");
             switch (mode)
             {

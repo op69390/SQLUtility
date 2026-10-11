@@ -79,7 +79,12 @@ namespace SQLUtility.Core.Assistant
             if (requete.Limite > 0)
                 sql.AppendLine().Append("FETCH FIRST ").Append(requete.Limite.ToString(CultureInfo.InvariantCulture)).Append(" ROWS ONLY");
 
-            return new ResultatGeneration(sql.ToString(), erreurs);
+            // Colonnes du résultat (EF-50) : RRN éventuel, puis les colonnes sélectionnées.
+            List<ColonneInfo> resultat = new List<ColonneInfo>();
+            if (requete.AvecRrn)
+                resultat.Add(new ColonneInfo { Nom = "RRN", NomSysteme = "RRN", TypeDonnee = "DECIMAL", Longueur = 15, Libelle = "N° relatif d'enregistrement" });
+            foreach (ColonneInfo colonne in colonnes) resultat.Add(ComposeurEtapes.Copier(colonne, colonne.Nom));
+            return new ResultatGeneration(sql.ToString(), erreurs, null, resultat);
         }
 
         /// <summary>Relecture d'une ligne par sa clé ou son RRN, pour préremplir la modification.</summary>
