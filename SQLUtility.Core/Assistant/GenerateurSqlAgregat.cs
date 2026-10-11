@@ -170,6 +170,8 @@ namespace SQLUtility.Core.Assistant
                         erreurs.Add(element.Colonne.Nom + " : indiquez le format de la date Atlas pour la regrouper par période.");
                         return null;
                     }
+                    string calcul = PeriodeArithmetique(colonne, element.FormatDate.Value, element.Periode);
+                    if (calcul != null) return calcul;
                     date = "CASE WHEN " + colonne + " = 0 THEN NULL ELSE " + GenerateurExpressionDate.Generer(colonne, element.FormatDate.Value) + " END";
                     break;
                 default:
@@ -183,6 +185,32 @@ namespace SQLUtility.Core.Assistant
                 case PeriodeDate.Mois: return "YEAR(" + date + ") * 100 + MONTH(" + date + ")";
                 default: return categorie == CategorieType.Date ? date : "(" + date + ")";
             }
+        }
+
+        /// <summary>
+        /// Année ou mois d'une date CYYMMDD ou AAAAMMJJ par simple calcul, sans décodage en DATE :
+        /// plus lisible, et bien plus léger sur un gros fichier Atlas. Ex. CYYMMDD 1261015 →
+        /// année 1900 + INTEGER(1261015 / 10000) = 2026, mois 190000 + INTEGER(1261015 / 100) = 202610.
+        /// Null pour les autres formats ou pour le jour (décodage complet).
+        /// </summary>
+        private static string PeriodeArithmetique(string colonne, FormatDate format, PeriodeDate periode)
+        {
+            if (periode != PeriodeDate.Annee && periode != PeriodeDate.Mois) return null;
+            string diviseur = periode == PeriodeDate.Annee ? "10000" : "100";
+            string calcul;
+            switch (format)
+            {
+                case FormatDate.Cymd:
+                    calcul = (periode == PeriodeDate.Annee ? "1900" : "190000") + " + INTEGER(" + colonne + " / " + diviseur + ")";
+                    break;
+                case FormatDate.Iso:
+                    calcul = "INTEGER(" + colonne + " / " + diviseur + ")";
+                    break;
+                default:
+                    return null;
+            }
+            // 0 = « pas de date » dans Atlas : NULL plutôt qu'une fausse année 1900.
+            return "CASE WHEN " + colonne + " = 0 THEN NULL ELSE " + calcul + " END";
         }
 
         private static string ConditionHaving(CritereAgregat critere, RequeteJointure baseRequete, bool qualifier,
