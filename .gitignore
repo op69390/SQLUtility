@@ -63,3 +63,6 @@ obj/
 *.user
 *.suo
 packages/
+
+## Worktrees de Claude Code
+.claude/worktrees/

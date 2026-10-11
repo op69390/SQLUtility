@@ -116,6 +116,50 @@ namespace SQLUtility.Core.Assistant
         }
     }
 
+    /// <summary>
+    /// Condition d'existence (niveau 4) : la ligne est retenue s'il existe — ou, avec
+    /// <see cref="Negation"/>, s'il n'existe aucune — ligne liée dans <see cref="Table"/>,
+    /// éventuellement filtrée. Ex. « articles sans aucun OF ». (EF-48)
+    /// Généré en [NOT] EXISTS plutôt qu'en [NOT] IN : NOT IN ne retient aucune ligne dès
+    /// que la sous-requête renvoie un NULL.
+    /// </summary>
+    public sealed class CritereExistence
+    {
+        public CritereExistence(TableRequete table, bool negation)
+        {
+            if (table == null) throw new ArgumentNullException(nameof(table));
+            Table = table;
+            Negation = negation;
+            Conditions = new List<ConditionJointure>();
+            Criteres = new List<CritereFiltre>();
+        }
+
+        /// <summary>Table de la sous-requête, avec son alias (S1, S2...).</summary>
+        public TableRequete Table { get; }
+
+        public bool Negation { get; set; }
+
+        /// <summary>Liens « colonne de la sous-requête = colonne d'une table de la requête ».</summary>
+        public List<ConditionJointure> Conditions { get; private set; }
+
+        /// <summary>Filtres sur les lignes de la sous-requête.</summary>
+        public List<CritereFiltre> Criteres { get; private set; }
+
+        public string DescriptionConditions
+        {
+            get
+            {
+                List<string> textes = new List<string>();
+                foreach (ConditionJointure condition in Conditions)
+                {
+                    if (condition.ColonneJointe == null || condition.TableLiee == null || condition.ColonneLiee == null) continue;
+                    textes.Add(Table.Alias + "." + condition.ColonneJointe.Nom + " = " + condition.TableLiee.Alias + "." + condition.ColonneLiee.Nom);
+                }
+                return string.Join(" ET ", textes);
+            }
+        }
+    }
+
     /// <summary>Colonne affichée d'une requête multi-tables.</summary>
     public sealed class ColonneRequete
     {
@@ -137,6 +181,7 @@ namespace SQLUtility.Core.Assistant
             if (principale == null) throw new ArgumentNullException(nameof(principale));
             Principale = principale;
             Jointures = new List<Jointure>();
+            Existences = new List<CritereExistence>();
             Colonnes = new List<ColonneRequete>();
             Criteres = new List<CritereFiltre>();
             Tris = new List<CritereTri>();
@@ -147,6 +192,15 @@ namespace SQLUtility.Core.Assistant
 
         /// <summary>Tables jointes, dans l'ordre : chacune ne peut se lier qu'aux précédentes.</summary>
         public List<Jointure> Jointures { get; private set; }
+
+        /// <summary>Conditions d'existence ([NOT] EXISTS), combinées par AND aux critères. (EF-48)</summary>
+        public List<CritereExistence> Existences { get; private set; }
+
+        /// <summary>Vrai si les colonnes doivent être qualifiées par alias (jointure ou sous-requête corrélée).</summary>
+        public bool AvecAlias
+        {
+            get { return Jointures.Count > 0 || Existences.Count > 0; }
+        }
 
         /// <summary>Colonnes affichées ; vide = toutes les colonnes de toutes les tables.</summary>
         public List<ColonneRequete> Colonnes { get; private set; }
