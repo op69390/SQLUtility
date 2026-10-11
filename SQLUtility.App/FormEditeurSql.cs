@@ -4,6 +4,7 @@ using System.Data;
 using System.Diagnostics;
 using System.Drawing;
 using System.Globalization;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -12,6 +13,7 @@ using SQLUtility.Core.Connexions;
 using SQLUtility.Core.Edition;
 using SQLUtility.Core.Execution;
 using SQLUtility.Core.Optimisation;
+using SQLUtility.Data.Fichiers;
 using SQLUtility.Data.Parametres;
 using SQLUtility.Data.Providers;
 
@@ -51,14 +53,28 @@ namespace SQLUtility.App
         private ITransactionExecution pTransactionEnCours;
         private string pDescriptionTransaction;
 
+        // Fichiers .sql (EF-33) : script courant et dernière version ouverte ou enregistrée.
+        private readonly GestionnaireParametres pGestionnaire;
+        private string pCheminFichier;
+        private string pTexteEnregistre = string.Empty;
+
         public FormEditeurSql(ParametresApplication parametres)
+            : this(parametres, null)
+        {
+        }
+
+        /// <param name="gestionnaire">Pour mémoriser le dernier dossier des scripts (EF-33) ; facultatif.</param>
+        public FormEditeurSql(ParametresApplication parametres, GestionnaireParametres gestionnaire)
         {
             if (parametres == null) throw new ArgumentNullException(nameof(parametres));
             pParametres = parametres;
+            pGestionnaire = gestionnaire;
             InitializeComponent();
             pRegles = new List<IRegleAnalyse> { new RegleSelectEtoile() };
             InitialiserCompletion();
             PeuplerConnexionsEditeur();
+            // Second abonnement, hors de la garde de coloration : toute modification met le titre à jour.
+            zoneEditeur.TextChanged += delegate { MettreAJourTitre(); };
         }
 
         protected override void OnLoad(EventArgs e)
@@ -70,6 +86,169 @@ namespace SQLUtility.App
                 "FROM ATLASDTA.ARTICLES" + Environment.NewLine +
                 "WHERE DATCRE > 1260101  -- date au format CYYMMDD" + Environment.NewLine +
                 "ORDER BY ARTICLE;";
+            // L'exemple n'est pas un travail à enregistrer.
+            pTexteEnregistre = zoneEditeur.Text;
+            MettreAJourTitre();
+        }
+
+        // ----------------------------------------------------------------- Fichiers .sql (EF-33)
+
+        private void menuNouveau_Click(object sender, EventArgs e)
+        {
+            if (!ConfirmerAbandon()) return;
+            zoneEditeur.Clear();
+            pCheminFichier = null;
+            pTexteEnregistre = zoneEditeur.Text;
+            MettreAJourTitre();
+            Statut("Nouveau script.");
+        }
+
+        private void menuOuvrir_Click(object sender, EventArgs e)
+        {
+            if (!ConfirmerAbandon()) return;
+            using (OpenFileDialog dialogue = new OpenFileDialog())
+            {
+                dialogue.Filter = FichierSql.Filtre;
+                dialogue.Title = "Ouvrir un script SQL";
+                if (!string.IsNullOrEmpty(pParametres.DernierRepertoireSql) && Directory.Exists(pParametres.DernierRepertoireSql))
+                    dialogue.InitialDirectory = pParametres.DernierRepertoireSql;
+                if (dialogue.ShowDialog(this) != DialogResult.OK) return;
+                OuvrirFichier(dialogue.FileName);
+            }
+        }
+
+        /// <summary>Charge un script dans l'éditeur ; retourne faux (et prévient) en cas d'échec de lecture.</summary>
+        internal bool OuvrirFichier(string chemin)
+        {
+            string texte;
+            try
+            {
+                texte = FichierSql.Lire(chemin);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Lecture impossible de « " + chemin + " » : " + ex.Message, "Ouvrir", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+            zoneEditeur.Text = texte;
+            pCheminFichier = chemin;
+            pTexteEnregistre = zoneEditeur.Text;
+            MemoriserRepertoire(chemin);
+            MettreAJourTitre();
+            Statut("Ouvert : " + chemin);
+            return true;
+        }
+
+        private void menuEnregistrer_Click(object sender, EventArgs e)
+        {
+            Enregistrer();
+        }
+
+        private void menuEnregistrerSous_Click(object sender, EventArgs e)
+        {
+            EnregistrerSous();
+        }
+
+        private void menuFermer_Click(object sender, EventArgs e)
+        {
+            Close();
+        }
+
+        /// <summary>Enregistre dans le fichier courant, ou demande un nom ; vrai si le script est enregistré.</summary>
+        private bool Enregistrer()
+        {
+            return string.IsNullOrEmpty(pCheminFichier) ? EnregistrerSous() : EcrireFichier(pCheminFichier);
+        }
+
+        private bool EnregistrerSous()
+        {
+            using (SaveFileDialog dialogue = new SaveFileDialog())
+            {
+                dialogue.Filter = FichierSql.Filtre;
+                dialogue.Title = "Enregistrer le script SQL";
+                dialogue.DefaultExt = "sql";
+                dialogue.AddExtension = true;
+                dialogue.OverwritePrompt = true;
+                if (!string.IsNullOrEmpty(pCheminFichier))
+                {
+                    dialogue.InitialDirectory = Path.GetDirectoryName(pCheminFichier);
+                    dialogue.FileName = Path.GetFileName(pCheminFichier);
+                }
+                else if (!string.IsNullOrEmpty(pParametres.DernierRepertoireSql) && Directory.Exists(pParametres.DernierRepertoireSql))
+                {
+                    dialogue.InitialDirectory = pParametres.DernierRepertoireSql;
+                }
+                if (dialogue.ShowDialog(this) != DialogResult.OK) return false;
+                return EcrireFichier(dialogue.FileName);
+            }
+        }
+
+        /// <summary>Écrit le script ; retourne faux (et prévient) en cas d'échec, le texte restant marqué modifié.</summary>
+        internal bool EcrireFichier(string chemin)
+        {
+            try
+            {
+                FichierSql.Ecrire(chemin, zoneEditeur.Text);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "Enregistrement impossible dans « " + chemin + " » : " + ex.Message, "Enregistrer", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+            pCheminFichier = chemin;
+            pTexteEnregistre = zoneEditeur.Text;
+            MemoriserRepertoire(chemin);
+            MettreAJourTitre();
+            Statut("Enregistré : " + chemin);
+            return true;
+        }
+
+        /// <summary>
+        /// Avant de remplacer ou de fermer un script modifié : Oui = enregistrer, Non = abandonner,
+        /// Annuler = ne rien faire. Retourne vrai si l'on peut continuer.
+        /// </summary>
+        private bool ConfirmerAbandon()
+        {
+            if (!EstModifie) return true;
+            DialogResult choix = MessageBox.Show(this,
+                "Enregistrer les modifications de « " + NomAffiche + " » ?",
+                "Script modifié", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+            if (choix == DialogResult.Cancel) return false;
+            return choix == DialogResult.No || Enregistrer();
+        }
+
+        /// <summary>Vrai si le texte diffère de la dernière version ouverte ou enregistrée.</summary>
+        internal bool EstModifie
+        {
+            get { return !string.Equals(zoneEditeur.Text, pTexteEnregistre ?? string.Empty, StringComparison.Ordinal); }
+        }
+
+        private string NomAffiche
+        {
+            get { return string.IsNullOrEmpty(pCheminFichier) ? "(sans nom)" : Path.GetFileName(pCheminFichier); }
+        }
+
+        private void MettreAJourTitre()
+        {
+            string titre = "Éditeur SQL — " + NomAffiche + (EstModifie ? " *" : string.Empty);
+            if (Text != titre) Text = titre;
+        }
+
+        /// <summary>Retient le dossier pour la prochaine boîte Ouvrir / Enregistrer ; un échec n'empêche rien.</summary>
+        private void MemoriserRepertoire(string chemin)
+        {
+            string repertoire = Path.GetDirectoryName(Path.GetFullPath(chemin));
+            if (string.Equals(repertoire, pParametres.DernierRepertoireSql, StringComparison.OrdinalIgnoreCase)) return;
+            pParametres.DernierRepertoireSql = repertoire;
+            if (pGestionnaire == null) return;
+            try
+            {
+                pGestionnaire.Enregistrer(pParametres);
+            }
+            catch (Exception ex)
+            {
+                Trace.WriteLine("Dernier dossier des scripts non mémorisé : " + ex.Message);
+            }
         }
 
         // ----------------------------------------------------------------- Coloration
@@ -675,7 +854,12 @@ namespace SQLUtility.App
                 e.Cancel = true;
                 return;
             }
-            if (pTransactionEnCours == null) return;
+            if (pTransactionEnCours == null)
+            {
+                // EF-33 : un script modifié n'est pas perdu sans confirmation.
+                if (!ConfirmerAbandon()) e.Cancel = true;
+                return;
+            }
 
             DialogResult choix = MessageBox.Show(this,
                 "Une transaction est en attente : " + pDescriptionTransaction + "." + Environment.NewLine + Environment.NewLine +
@@ -684,7 +868,11 @@ namespace SQLUtility.App
                 "Annuler : ne pas fermer",
                 "Transaction en attente", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
             if (choix == DialogResult.Cancel || !TerminerTransaction(choix == DialogResult.Yes))
+            {
                 e.Cancel = true;
+                return;
+            }
+            if (!ConfirmerAbandon()) e.Cancel = true;
         }
 
         private void AfficherTransaction()

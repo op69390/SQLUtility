@@ -53,6 +53,7 @@
     <Compile Include="Providers\Db2ForIConnexionProvider.cs" />
     <Compile Include="Providers\TransactionExecutionOdbc.cs" />
     <Compile Include="Providers\ConnexionProviderFactory.cs" />
+    <Compile Include="Fichiers\FichierSql.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

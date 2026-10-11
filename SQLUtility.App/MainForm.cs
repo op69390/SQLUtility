@@ -67,7 +67,7 @@ namespace SQLUtility.App
         private void menuEditeurNouveau_Click(object sender, EventArgs e)
         {
             // Éditeur ouvert en mode non modal (fenêtre de travail) ; se libère à sa fermeture.
-            FormEditeurSql editeur = new FormEditeurSql(pParametres);
+            FormEditeurSql editeur = new FormEditeurSql(pParametres, pGestionnaire);
             editeur.Show(this);
         }
     }

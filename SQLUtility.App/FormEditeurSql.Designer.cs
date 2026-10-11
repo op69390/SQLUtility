@@ -17,6 +17,14 @@
 
         private void InitializeComponent()
         {
+            this.menuEditeur = new System.Windows.Forms.MenuStrip();
+            this.menuFichier = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuNouveau = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuOuvrir = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuEnregistrer = new System.Windows.Forms.ToolStripMenuItem();
+            this.menuEnregistrerSous = new System.Windows.Forms.ToolStripMenuItem();
+            this.separateurMenu = new System.Windows.Forms.ToolStripSeparator();
+            this.menuFermer = new System.Windows.Forms.ToolStripMenuItem();
             this.panneauHaut = new System.Windows.Forms.Panel();
             this.etiquetteAstuce = new System.Windows.Forms.Label();
             this.boutonAnalyser = new System.Windows.Forms.Button();
@@ -42,6 +50,7 @@
             this.grilleResultats = new System.Windows.Forms.DataGridView();
             this.barreStatut = new System.Windows.Forms.StatusStrip();
             this.etiquetteStatut = new System.Windows.Forms.ToolStripStatusLabel();
+            this.menuEditeur.SuspendLayout();
             this.panneauHaut.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.separateur)).BeginInit();
             this.separateur.Panel1.SuspendLayout();
@@ -55,6 +64,73 @@
             ((System.ComponentModel.ISupportInitialize)(this.grilleResultats)).BeginInit();
             this.barreStatut.SuspendLayout();
             this.SuspendLayout();
+            //
+            // menuEditeur
+            //
+            this.menuEditeur.Items.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.menuFichier});
+            this.menuEditeur.Location = new System.Drawing.Point(0, 0);
+            this.menuEditeur.Name = "menuEditeur";
+            this.menuEditeur.Size = new System.Drawing.Size(784, 24);
+            this.menuEditeur.TabIndex = 3;
+            //
+            // menuFichier
+            //
+            this.menuFichier.DropDownItems.AddRange(new System.Windows.Forms.ToolStripItem[] {
+            this.menuNouveau,
+            this.menuOuvrir,
+            this.menuEnregistrer,
+            this.menuEnregistrerSous,
+            this.separateurMenu,
+            this.menuFermer});
+            this.menuFichier.Name = "menuFichier";
+            this.menuFichier.Size = new System.Drawing.Size(54, 20);
+            this.menuFichier.Text = "&Fichier";
+            //
+            // menuNouveau
+            //
+            this.menuNouveau.Name = "menuNouveau";
+            this.menuNouveau.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.N)));
+            this.menuNouveau.Size = new System.Drawing.Size(240, 22);
+            this.menuNouveau.Text = "&Nouveau";
+            this.menuNouveau.Click += new System.EventHandler(this.menuNouveau_Click);
+            //
+            // menuOuvrir
+            //
+            this.menuOuvrir.Name = "menuOuvrir";
+            this.menuOuvrir.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.O)));
+            this.menuOuvrir.Size = new System.Drawing.Size(240, 22);
+            this.menuOuvrir.Text = "&Ouvrir…";
+            this.menuOuvrir.Click += new System.EventHandler(this.menuOuvrir_Click);
+            //
+            // menuEnregistrer
+            //
+            this.menuEnregistrer.Name = "menuEnregistrer";
+            this.menuEnregistrer.ShortcutKeys = ((System.Windows.Forms.Keys)((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.S)));
+            this.menuEnregistrer.Size = new System.Drawing.Size(240, 22);
+            this.menuEnregistrer.Text = "&Enregistrer";
+            this.menuEnregistrer.Click += new System.EventHandler(this.menuEnregistrer_Click);
+            //
+            // menuEnregistrerSous
+            //
+            this.menuEnregistrerSous.Name = "menuEnregistrerSous";
+            this.menuEnregistrerSous.ShortcutKeys = ((System.Windows.Forms.Keys)(((System.Windows.Forms.Keys.Control | System.Windows.Forms.Keys.Shift)
+            | System.Windows.Forms.Keys.S)));
+            this.menuEnregistrerSous.Size = new System.Drawing.Size(240, 22);
+            this.menuEnregistrerSous.Text = "Enregistrer &sous…";
+            this.menuEnregistrerSous.Click += new System.EventHandler(this.menuEnregistrerSous_Click);
+            //
+            // separateurMenu
+            //
+            this.separateurMenu.Name = "separateurMenu";
+            this.separateurMenu.Size = new System.Drawing.Size(237, 6);
+            //
+            // menuFermer
+            //
+            this.menuFermer.Name = "menuFermer";
+            this.menuFermer.Size = new System.Drawing.Size(240, 22);
+            this.menuFermer.Text = "&Fermer";
+            this.menuFermer.Click += new System.EventHandler(this.menuFermer_Click);
             //
             // panneauHaut
             //
@@ -347,13 +423,17 @@
             this.Controls.Add(this.separateur);
             this.Controls.Add(this.panneauHaut);
             this.Controls.Add(this.barreStatut);
+            this.Controls.Add(this.menuEditeur);
             this.KeyPreview = true;
+            this.MainMenuStrip = this.menuEditeur;
             this.MinimumSize = new System.Drawing.Size(640, 400);
             this.Name = "FormEditeurSql";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
             this.Text = "Éditeur SQL";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.FormEditeurSql_FormClosing);
             this.KeyDown += new System.Windows.Forms.KeyEventHandler(this.FormEditeurSql_KeyDown);
+            this.menuEditeur.ResumeLayout(false);
+            this.menuEditeur.PerformLayout();
             this.panneauHaut.ResumeLayout(false);
             this.panneauHaut.PerformLayout();
             this.separateur.Panel1.ResumeLayout(false);
@@ -375,6 +455,14 @@
 
         #endregion
 
+        private System.Windows.Forms.MenuStrip menuEditeur;
+        private System.Windows.Forms.ToolStripMenuItem menuFichier;
+        private System.Windows.Forms.ToolStripMenuItem menuNouveau;
+        private System.Windows.Forms.ToolStripMenuItem menuOuvrir;
+        private System.Windows.Forms.ToolStripMenuItem menuEnregistrer;
+        private System.Windows.Forms.ToolStripMenuItem menuEnregistrerSous;
+        private System.Windows.Forms.ToolStripSeparator separateurMenu;
+        private System.Windows.Forms.ToolStripMenuItem menuFermer;
         private System.Windows.Forms.Panel panneauHaut;
         private System.Windows.Forms.Label etiquetteAstuce;
         private System.Windows.Forms.Button boutonAnalyser;
