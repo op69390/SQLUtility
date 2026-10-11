@@ -29,6 +29,7 @@
             this.zoneEditeur = new System.Windows.Forms.RichTextBox();
             this.listeAnalyse = new System.Windows.Forms.ListBox();
             this.boutonExecuter = new System.Windows.Forms.Button();
+            this.boutonAssistant = new System.Windows.Forms.Button();
             this.etiquetteLimite = new System.Windows.Forms.Label();
             this.champLimite = new System.Windows.Forms.NumericUpDown();
             this.panneauTransaction = new System.Windows.Forms.Panel();
@@ -57,6 +58,7 @@
             //
             // panneauHaut
             //
+            this.panneauHaut.Controls.Add(this.boutonAssistant);
             this.panneauHaut.Controls.Add(this.champLimite);
             this.panneauHaut.Controls.Add(this.etiquetteLimite);
             this.panneauHaut.Controls.Add(this.boutonExecuter);
@@ -93,6 +95,16 @@
             this.boutonExecuter.Text = "Exécuter (F5)";
             this.boutonExecuter.UseVisualStyleBackColor = true;
             this.boutonExecuter.Click += new System.EventHandler(this.boutonExecuter_Click);
+            //
+            // boutonAssistant
+            //
+            this.boutonAssistant.Location = new System.Drawing.Point(648, 43);
+            this.boutonAssistant.Name = "boutonAssistant";
+            this.boutonAssistant.Size = new System.Drawing.Size(126, 23);
+            this.boutonAssistant.TabIndex = 7;
+            this.boutonAssistant.Text = "Assistant…";
+            this.boutonAssistant.UseVisualStyleBackColor = true;
+            this.boutonAssistant.Click += new System.EventHandler(this.boutonAssistant_Click);
             //
             // boutonAnalyser
             //
@@ -375,6 +387,7 @@
         private System.Windows.Forms.RichTextBox zoneEditeur;
         private System.Windows.Forms.ListBox listeAnalyse;
         private System.Windows.Forms.Button boutonExecuter;
+        private System.Windows.Forms.Button boutonAssistant;
         private System.Windows.Forms.Label etiquetteLimite;
         private System.Windows.Forms.NumericUpDown champLimite;
         private System.Windows.Forms.Panel panneauTransaction;

@@ -330,6 +330,47 @@ namespace SQLUtility.App
             }
         }
 
+        // ----------------------------------------------------------------- Assistant (EF-40 à EF-43)
+
+        private void boutonAssistant_Click(object sender, EventArgs e)
+        {
+            if (pProfilCatalogue == null || pProviderCatalogue == null)
+            {
+                Statut("Choisissez d'abord une connexion (liste « Connexion / schéma »).");
+                listeConnexionsEditeur.Focus();
+                return;
+            }
+
+            string schema = listeSchemasEditeur.SelectedItem as string;
+            if (schema == null && !string.IsNullOrEmpty(pProfilCatalogue.BibliothequeParDefaut))
+                schema = pProfilCatalogue.BibliothequeParDefaut.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries)[0];
+
+            using (FormAssistantRequete assistant = new FormAssistantRequete(pProfilCatalogue, pProviderCatalogue, schema))
+            {
+                if (assistant.ShowDialog(this) == DialogResult.OK && !string.IsNullOrEmpty(assistant.SqlGenere))
+                    InsererInstruction(assistant.SqlGenere);
+            }
+        }
+
+        /// <summary>
+        /// Ajoute l'instruction en fin de texte et la sélectionne : F5 n'exécutera qu'elle,
+        /// avec l'analyse de risque et les confirmations habituelles.
+        /// </summary>
+        internal void InsererInstruction(string sql)
+        {
+            string bloc = sql.Replace("\r\n", "\n").TrimEnd() + ";";
+            string texte = zoneEditeur.Text;
+            string separation = texte.Trim().Length == 0 ? string.Empty : (texte.EndsWith("\n", StringComparison.Ordinal) ? "\n" : "\n\n");
+            if (texte.Trim().Length == 0) zoneEditeur.Clear();
+
+            int debut = zoneEditeur.TextLength + separation.Length;
+            zoneEditeur.AppendText(separation + bloc);
+            zoneEditeur.Select(debut, zoneEditeur.TextLength - debut);
+            zoneEditeur.ScrollToCaret();
+            zoneEditeur.Focus();
+            Statut("Instruction insérée et sélectionnée : F5 pour l'exécuter.");
+        }
+
         // ----------------------------------------------------------------- Catalogue (complétion EF-16)
 
         private void PeuplerConnexionsEditeur()

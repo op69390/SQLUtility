@@ -87,6 +87,12 @@
     <Compile Include="FormInsertionColonne.Designer.cs">
       <DependentUpon>FormInsertionColonne.cs</DependentUpon>
     </Compile>
+    <Compile Include="FormAssistantRequete.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FormAssistantRequete.Designer.cs">
+      <DependentUpon>FormAssistantRequete.cs</DependentUpon>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
