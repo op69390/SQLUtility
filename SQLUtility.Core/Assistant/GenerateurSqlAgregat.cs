@@ -25,7 +25,7 @@ namespace SQLUtility.Core.Assistant
             List<TableRequete> introduites = new List<TableRequete>();
             HashSet<TableRequete> externes = new HashSet<TableRequete>();
             RequeteJointure baseRequete = requete.Base;
-            bool qualifier = baseRequete.Jointures.Count > 0;
+            bool qualifier = baseRequete.AvecAlias;
 
             string from = GenerateurSqlJointure.ConstruireFrom(baseRequete, qualifier, introduites, externes, erreurs, avertissements);
             if (requete.Elements.Count == 0)

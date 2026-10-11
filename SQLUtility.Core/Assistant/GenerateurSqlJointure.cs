@@ -140,7 +140,57 @@ namespace SQLUtility.Core.Assistant
                         + " écarte les lignes sans correspondance : la jointure externe de " + table.Alias + " se comporte comme une jointure interne.");
                 conditions.Add(condition);
             }
+            foreach (CritereExistence existence in requete.Existences)
+            {
+                string condition = ConstruireExistence(existence, introduites, erreurs);
+                if (condition != null) conditions.Add(condition);
+            }
             return conditions;
+        }
+
+        /// <summary>
+        /// [NOT] EXISTS (SELECT 1 FROM T S1 WHERE S1.x = A.y AND filtres de S1). (EF-48)
+        /// Sans lien vers la requête, la sous-requête porterait sur toute la table : refusé.
+        /// </summary>
+        internal static string ConstruireExistence(CritereExistence existence, List<TableRequete> introduites, List<string> erreurs)
+        {
+            TableRequete table = existence.Table;
+            foreach (TableRequete presente in introduites)
+            {
+                if (string.Equals(presente.Alias, table.Alias, StringComparison.OrdinalIgnoreCase))
+                {
+                    erreurs.Add("Alias « " + table.Alias + " » utilisé deux fois.");
+                    return null;
+                }
+            }
+
+            List<string> conditions = new List<string>();
+            foreach (ConditionJointure condition in existence.Conditions)
+            {
+                if (condition.ColonneJointe == null || condition.TableLiee == null || condition.ColonneLiee == null) continue;
+                if (!introduites.Contains(condition.TableLiee))
+                {
+                    erreurs.Add("Condition d'existence " + table.Alias + " : table " + condition.TableLiee.Alias + " absente de la requête.");
+                    continue;
+                }
+                if (!DetecteurJointures.TypesCompatibles(condition.ColonneJointe, condition.ColonneLiee))
+                    erreurs.Add(Qualifier(table, condition.ColonneJointe.Nom) + " et " + Qualifier(condition.TableLiee, condition.ColonneLiee.Nom)
+                        + " ne sont pas de types comparables.");
+                conditions.Add(Qualifier(table, condition.ColonneJointe.Nom) + " = " + Qualifier(condition.TableLiee, condition.ColonneLiee.Nom));
+            }
+            if (conditions.Count == 0)
+            {
+                erreurs.Add("Condition d'existence sur " + table.Alias + " (" + table.Table.Nom + ") sans lien avec la requête : refusée.");
+                return null;
+            }
+            foreach (CritereFiltre critere in existence.Criteres)
+            {
+                if (critere == null || critere.Colonne == null) continue;
+                string condition = GenerateurSqlSimple.ConstruireCondition(critere, Qualifier(table, critere.Colonne.Nom), erreurs);
+                if (condition != null) conditions.Add(condition);
+            }
+            return (existence.Negation ? "NOT EXISTS" : "EXISTS") + " (SELECT 1 FROM " + NomTable(table)
+                + " WHERE " + string.Join(" AND ", conditions) + ")";
         }
 
         internal static void AjouterWhere(StringBuilder sql, List<string> conditions)

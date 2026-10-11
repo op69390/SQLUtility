@@ -49,16 +49,13 @@ namespace SQLUtility.Core.Execution
             return TypeInstructionSql.Inconnu;
         }
 
-        /// <summary>Indique si l'instruction comporte une clause WHERE.</summary>
+        /// <summary>
+        /// Indique si l'instruction comporte une clause WHERE principale. Un WHERE placé dans une
+        /// sous-requête (entre parenthèses) ne limite pas les lignes modifiées : il ne compte pas.
+        /// </summary>
         public static bool ContientWhere(string sql)
         {
-            foreach (JetonSql jeton in TokeniseurSql.Tokeniser(sql))
-            {
-                if (jeton.Type == TypeJetonSql.MotCle
-                    && string.Equals(jeton.Texte, "WHERE", StringComparison.OrdinalIgnoreCase))
-                    return true;
-            }
-            return false;
+            return TrouverMotCle(TokeniseurSql.Tokeniser(sql), "WHERE") != null;
         }
 
         /// <summary>
@@ -130,18 +127,26 @@ namespace SQLUtility.Core.Execution
         }
 
         /// <summary>
-        /// Construit, pour un UPDATE/DELETE simple, le « SELECT COUNT(*) » équivalent (même
-        /// table et même clause WHERE) pour estimer les lignes impactées. Retourne null si
-        /// non applicable. Best-effort : prévu pour les instructions simples (sans sous-requête
-        /// contenant un WHERE) ; la requête de comptage est présentée à l'utilisateur.
+        /// Construit le « SELECT COUNT(*) » qui estime les lignes touchées : même table et même
+        /// WHERE principal pour un UPDATE / DELETE (les sous-requêtes, entre parenthèses, sont
+        /// ignorées dans la recherche des mots-clés) ; comptage du SELECT pour un INSERT … SELECT.
+        /// Retourne null si non applicable (ex. INSERT … VALUES).
         /// </summary>
         public static string ConstruireComptage(string sql)
         {
             TypeInstructionSql type = DetecterType(sql);
+            IReadOnlyList<JetonSql> jetons = TokeniseurSql.Tokeniser(sql);
+
+            if (type == TypeInstructionSql.Insert)
+            {
+                JetonSql jetonSelect = TrouverMotCle(jetons, "SELECT");
+                if (jetonSelect == null) return null;
+                string selection = sql.Substring(jetonSelect.Position).Trim().TrimEnd(';', ' ', '\r', '\n', '\t');
+                return "SELECT COUNT(*) FROM (" + selection + ") AS LIGNES_A_COPIER";
+            }
             if (type != TypeInstructionSql.Update && type != TypeInstructionSql.Delete)
                 return null;
 
-            IReadOnlyList<JetonSql> jetons = TokeniseurSql.Tokeniser(sql);
             JetonSql jetonWhere = TrouverMotCle(jetons, "WHERE");
 
             string table;
@@ -175,11 +180,19 @@ namespace SQLUtility.Core.Execution
             return comptage;
         }
 
+        /// <summary>Premier mot-clé <paramref name="mot"/> hors parenthèses (niveau principal de l'instruction).</summary>
         private static JetonSql TrouverMotCle(IReadOnlyList<JetonSql> jetons, string mot)
         {
+            int profondeur = 0;
             foreach (JetonSql jeton in jetons)
             {
-                if (jeton.Type == TypeJetonSql.MotCle
+                if (jeton.Type == TypeJetonSql.Ponctuation)
+                {
+                    if (jeton.Texte == "(") profondeur++;
+                    else if (jeton.Texte == ")" && profondeur > 0) profondeur--;
+                    continue;
+                }
+                if (profondeur == 0 && jeton.Type == TypeJetonSql.MotCle
                     && string.Equals(jeton.Texte, mot, StringComparison.OrdinalIgnoreCase))
                     return jeton;
             }
