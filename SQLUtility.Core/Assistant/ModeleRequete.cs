@@ -36,6 +36,9 @@ namespace SQLUtility.Core.Assistant
 
         /// <summary>Format de stockage si la colonne numérique contient une date Atlas.</summary>
         public FormatDate? FormatDate { get; set; }
+
+        /// <summary>Table de la requête portant la colonne (jointures) ; null pour une seule table.</summary>
+        public TableRequete Table { get; set; }
     }
 
     /// <summary>Critère de tri.</summary>
@@ -49,6 +52,9 @@ namespace SQLUtility.Core.Assistant
 
         public ColonneInfo Colonne { get; }
         public bool Descendant { get; }
+
+        /// <summary>Table de la requête portant la colonne (jointures) ; null pour une seule table.</summary>
+        public TableRequete Table { get; set; }
     }
 
     /// <summary>Consultation d'une table (niveau 1). (EF-41)</summary>
@@ -132,10 +138,19 @@ namespace SQLUtility.Core.Assistant
     public sealed class ResultatGeneration
     {
         public ResultatGeneration(string sql, IList<string> erreurs)
+            : this(sql, erreurs, null)
+        {
+        }
+
+        public ResultatGeneration(string sql, IList<string> erreurs, IList<string> avertissements)
         {
             Erreurs = new ReadOnlyCollection<string>(erreurs ?? new List<string>());
+            Avertissements = new ReadOnlyCollection<string>(avertissements ?? new List<string>());
             Sql = Erreurs.Count == 0 ? sql : null;
         }
+
+        /// <summary>Points d'attention qui n'empêchent pas la génération (ex. lignes multipliées).</summary>
+        public IReadOnlyList<string> Avertissements { get; }
 
         /// <summary>Instruction SQL, ou null si la saisie comporte des erreurs.</summary>
         public string Sql { get; }

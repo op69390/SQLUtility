@@ -71,6 +71,9 @@
     <Compile Include="Assistant\FormateurLitteral.cs" />
     <Compile Include="Assistant\ModeleRequete.cs" />
     <Compile Include="Assistant\GenerateurSqlSimple.cs" />
+    <Compile Include="Assistant\ModeleJointure.cs" />
+    <Compile Include="Assistant\DetecteurJointures.cs" />
+    <Compile Include="Assistant\GenerateurSqlJointure.cs" />
     <Compile Include="Optimisation\Severite.cs" />
     <Compile Include="Optimisation\ResultatAnalyse.cs" />
     <Compile Include="Optimisation\IRegleAnalyse.cs" />

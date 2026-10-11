@@ -256,7 +256,15 @@ namespace SQLUtility.Core.Assistant
         private static string ConstruireCondition(CritereFiltre critere, List<string> erreurs)
         {
             if (critere == null || critere.Colonne == null) return null;
-            string colonne = NomColonne(critere.Colonne);
+            return ConstruireCondition(critere, NomColonne(critere.Colonne), erreurs);
+        }
+
+        /// <summary>
+        /// Condition d'un critère sur une expression de colonne donnée (nom simple, ou qualifié
+        /// par un alias dans une jointure). Partagé avec <see cref="GenerateurSqlJointure"/>.
+        /// </summary>
+        internal static string ConstruireCondition(CritereFiltre critere, string colonne, List<string> erreurs)
+        {
 
             switch (critere.Operateur)
             {

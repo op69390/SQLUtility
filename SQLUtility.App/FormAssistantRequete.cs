@@ -11,8 +11,9 @@ using SQLUtility.Core.Execution;
 namespace SQLUtility.App
 {
     /// <summary>
-    /// Assistant de requête, niveau 1 (une table) : consultation guidée et ajout /
-    /// modification / suppression d'une ligne désignée par sa clé ou son RRN. (EF-40 à EF-43)
+    /// Assistant de requête. Niveau 1 (une table) : consultation guidée et ajout /
+    /// modification / suppression d'une ligne désignée par sa clé ou son RRN (EF-40 à EF-43).
+    /// Niveau 2 : consultation sur plusieurs tables jointes, A étant la table de départ (EF-44 / EF-45).
     /// Le SQL produit est rendu à l'éditeur (<see cref="SqlGenere"/>), jamais exécuté ici,
     /// sauf la relecture d'une ligne, faite en lecture seule.
     /// </summary>
@@ -24,8 +25,14 @@ namespace SQLUtility.App
         private readonly IConnexionProvider pProvider;
         private readonly string pSchemaInitial;
 
+        /// <summary>Table principale (A) : celle de l'onglet Ligne et du FROM.</summary>
         private StructureTable pStructure;
-        private readonly Dictionary<string, ColonneInfo> pColonnesParLibelle = new Dictionary<string, ColonneInfo>();
+
+        // Niveau 2 (EF-44) : tables de la consultation (A, B, C...) et jointures de B, C...
+        private readonly List<TableRequete> pTables = new List<TableRequete>();
+        private readonly List<Jointure> pJointures = new List<Jointure>();
+
+        private readonly Dictionary<string, ColonneRequete> pColonnesParLibelle = new Dictionary<string, ColonneRequete>();
         private readonly Dictionary<string, OperateurFiltre> pOperateurs = new Dictionary<string, OperateurFiltre>();
         private readonly Dictionary<string, FormatDate> pFormats = new Dictionary<string, FormatDate>();
         private bool pRemplissage;
@@ -248,18 +255,17 @@ namespace SQLUtility.App
                 pColonnesParLibelle.Clear();
                 champRrn.Text = string.Empty;
 
+                // Nouvelle table principale : la consultation repart d'une seule table.
+                pTables.Clear();
+                pJointures.Clear();
+                pTables.Add(new TableRequete(pStructure, "A"));
+                AjouterColonnesConsultation(pTables[0]);
+                RafraichirTables();
+
                 foreach (ColonneInfo colonne in pStructure.Colonnes)
                 {
                     string type = TypesSql.Libelle(colonne.TypeDonnee, colonne.Longueur, colonne.Echelle);
-
-                    int ligne = grilleChoixColonnes.Rows.Add(false, colonne.Nom, colonne.Libelle, type, colonne.RangCleTexte, "", "");
-                    grilleChoixColonnes.Rows[ligne].Tag = colonne;
-
-                    string libelle = LibelleColonne(colonne);
-                    pColonnesParLibelle[libelle] = colonne;
-                    colFiltreColonne.Items.Add(libelle);
-
-                    ligne = grilleValeurs.Rows.Add(colonne.Nom, colonne.Libelle, type, colonne.RangCleTexte, "", "", false, FormatPropose(colonne));
+                    int ligne = grilleValeurs.Rows.Add(colonne.Nom, colonne.Libelle, type, colonne.RangCleTexte, "", "", false, FormatPropose(colonne));
                     DataGridViewRow rangee = grilleValeurs.Rows[ligne];
                     rangee.Tag = colonne;
                     if (!colonne.AccepteNull) rangee.Cells[colVNull.Index].ReadOnly = true;
@@ -276,9 +282,191 @@ namespace SQLUtility.App
             }
         }
 
-        private static string LibelleColonne(ColonneInfo colonne)
+        /// <summary>Lignes de la grille des colonnes et entrées de la liste des filtres pour une table.</summary>
+        private void AjouterColonnesConsultation(TableRequete table)
         {
-            return string.IsNullOrEmpty(colonne.Libelle) ? colonne.Nom : colonne.Nom + " — " + colonne.Libelle;
+            bool etat = pRemplissage;
+            pRemplissage = true;
+            try
+            {
+                foreach (ColonneInfo colonne in table.Structure.Colonnes)
+                {
+                    string type = TypesSql.Libelle(colonne.TypeDonnee, colonne.Longueur, colonne.Echelle);
+                    int ligne = grilleChoixColonnes.Rows.Add(false, table.Alias, colonne.Nom, colonne.Libelle, type, colonne.RangCleTexte, "", "");
+                    grilleChoixColonnes.Rows[ligne].Tag = new ColonneRequete(table, colonne);
+
+                    string libelle = LibelleColonne(table, colonne);
+                    pColonnesParLibelle[libelle] = new ColonneRequete(table, colonne);
+                    colFiltreColonne.Items.Add(libelle);
+                }
+            }
+            finally
+            {
+                pRemplissage = etat;
+            }
+        }
+
+        /// <summary>
+        /// Libellé d'une colonne dans la liste des filtres : sans préfixe pour la table A (le
+        /// niveau 1 reste inchangé), préfixé par l'alias pour les tables jointes.
+        /// </summary>
+        private string LibelleColonne(TableRequete table, ColonneInfo colonne)
+        {
+            string libelle = string.IsNullOrEmpty(colonne.Libelle) ? colonne.Nom : colonne.Nom + " — " + colonne.Libelle;
+            return pTables.Count > 0 && table == pTables[0] ? libelle : table.Alias + "." + libelle;
+        }
+
+        // ----------------------------------------------------------------- Jointures (niveau 2, EF-44 / EF-45)
+
+        private void boutonJoindre_Click(object sender, EventArgs e)
+        {
+            if (pStructure == null)
+            {
+                Info("Chargez d'abord la table principale (A), puis choisissez la table à joindre.");
+                return;
+            }
+            TableInfo table = TableSaisie();
+            if (table == null)
+            {
+                Info("Choisissez dans la liste la table à joindre.");
+                return;
+            }
+
+            StructureTable structure;
+            Cursor curseur = Cursor;
+            Cursor = Cursors.WaitCursor;
+            try
+            {
+                structure = pProvider.DecrireTable(pProfil, table);
+            }
+            catch (Exception ex)
+            {
+                Info("Échec du chargement de " + table.Nom + " : " + ex.Message);
+                return;
+            }
+            finally
+            {
+                Cursor = curseur;
+            }
+
+            TableRequete nouvelle = new TableRequete(structure, AliasLibre());
+            using (FormJointure dialogue = new FormJointure(pTables, nouvelle, null))
+            {
+                if (dialogue.ShowDialog(this) != DialogResult.OK) return;
+                pTables.Add(nouvelle);
+                pJointures.Add(dialogue.Jointure);
+            }
+            AjouterColonnesConsultation(nouvelle);
+            RafraichirTables();
+            onglets.SelectedTab = ongletConsulter;
+            Info(DescriptionTable(pStructure) + " — " + pTables.Count + " tables jointes.");
+            Regenerer();
+        }
+
+        private void grilleTables_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex > 0) ModifierJointure(e.RowIndex);
+        }
+
+        private void boutonModifierJointure_Click(object sender, EventArgs e)
+        {
+            int index = grilleTables.CurrentRow != null ? grilleTables.CurrentRow.Index : -1;
+            if (index < 1)
+            {
+                Info("Sélectionnez une table jointe (B, C...) : la table A n'a pas de jointure.");
+                return;
+            }
+            ModifierJointure(index);
+        }
+
+        private void ModifierJointure(int index)
+        {
+            Jointure actuelle = pJointures[index - 1];
+            using (FormJointure dialogue = new FormJointure(pTables.GetRange(0, index), actuelle.Table, actuelle))
+            {
+                if (dialogue.ShowDialog(this) != DialogResult.OK) return;
+                pJointures[index - 1] = dialogue.Jointure;
+            }
+            RafraichirTables();
+            Regenerer();
+        }
+
+        private void boutonRetirerTable_Click(object sender, EventArgs e)
+        {
+            int index = grilleTables.CurrentRow != null ? grilleTables.CurrentRow.Index : -1;
+            if (index < 1)
+            {
+                Info("Sélectionnez une table jointe à retirer (la table A se change avec « Charger »).");
+                return;
+            }
+            TableRequete table = pTables[index];
+            foreach (Jointure autre in pJointures)
+            {
+                if (autre.Table == table) continue;
+                foreach (ConditionJointure condition in autre.Conditions)
+                {
+                    if (condition.TableLiee != table) continue;
+                    Info("Impossible de retirer " + table.Alias + " : la jointure de " + autre.Table.Alias + " s'appuie dessus.");
+                    return;
+                }
+            }
+
+            pRemplissage = true;
+            try
+            {
+                for (int i = grilleChoixColonnes.Rows.Count - 1; i >= 0; i--)
+                    if (((ColonneRequete)grilleChoixColonnes.Rows[i].Tag).Table == table) grilleChoixColonnes.Rows.RemoveAt(i);
+                for (int i = grilleFiltres.Rows.Count - 1; i >= 0; i--)
+                {
+                    ColonneRequete colonne = ColonneDuFiltre(grilleFiltres.Rows[i]);
+                    if (!grilleFiltres.Rows[i].IsNewRow && colonne != null && colonne.Table == table) grilleFiltres.Rows.RemoveAt(i);
+                }
+                foreach (ColonneInfo colonne in table.Structure.Colonnes)
+                {
+                    string libelle = LibelleColonne(table, colonne);
+                    pColonnesParLibelle.Remove(libelle);
+                    colFiltreColonne.Items.Remove(libelle);
+                }
+                pJointures.RemoveAt(index - 1);
+                pTables.RemoveAt(index);
+            }
+            finally
+            {
+                pRemplissage = false;
+            }
+            RafraichirTables();
+            Regenerer();
+        }
+
+        /// <summary>Premier alias libre : A, B, C... puis T27, T28...</summary>
+        private string AliasLibre()
+        {
+            for (int i = 0; ; i++)
+            {
+                string alias = i < 26 ? ((char)('A' + i)).ToString() : "T" + (i + 1);
+                if (!pTables.Exists(t => string.Equals(t.Alias, alias, StringComparison.OrdinalIgnoreCase))) return alias;
+            }
+        }
+
+        private void RafraichirTables()
+        {
+            grilleTables.Rows.Clear();
+            for (int i = 0; i < pTables.Count; i++)
+            {
+                TableRequete table = pTables[i];
+                string nom = table.Table.Schema + "." + table.Table.Nom + (string.IsNullOrEmpty(table.Table.Libelle) ? string.Empty : " — " + table.Table.Libelle);
+                if (i == 0)
+                {
+                    grilleTables.Rows.Add(table.Alias, nom, "table de départ", string.Empty);
+                    continue;
+                }
+                Jointure jointure = pJointures[i - 1];
+                string type = jointure.Type == TypeJointure.ExterneGauche ? "LEFT OUTER" : "INNER";
+                if (jointure.Origine == OrigineJointure.ClePartielleDeduite) type += " (clé partielle)";
+                else if (jointure.Origine == OrigineJointure.Manuelle) type += " (manuelle)";
+                grilleTables.Rows.Add(table.Alias, nom, type, jointure.DescriptionConditions);
+            }
+            boutonModifierJointure.Enabled = boutonRetirerTable.Enabled = pTables.Count > 1;
         }
 
         /// <summary>
@@ -324,12 +512,12 @@ namespace SQLUtility.App
             // Colonne choisie : opérateur « = » et format de date proposés par défaut.
             if (e.ColumnIndex == colFiltreColonne.Index)
             {
-                ColonneInfo colonne = ColonneDuFiltre(ligne);
+                ColonneRequete colonne = ColonneDuFiltre(ligne);
                 pRemplissage = true;
                 try
                 {
                     if (ligne.Cells[colFiltreOperateur.Index].Value == null) ligne.Cells[colFiltreOperateur.Index].Value = "=";
-                    if (colonne != null) ligne.Cells[colFiltreFormat.Index].Value = FormatPropose(colonne);
+                    if (colonne != null) ligne.Cells[colFiltreFormat.Index].Value = FormatPropose(colonne.Colonne);
                 }
                 finally
                 {
@@ -515,29 +703,65 @@ namespace SQLUtility.App
 
             ResultatGeneration resultat = onglets.SelectedTab == ongletConsulter ? GenererConsultation() : GenererLigne();
             apercuSql.Text = resultat.Sql ?? string.Empty;
-            Erreurs(resultat.Erreurs);
+            Erreurs(resultat.Erreurs, resultat.Avertissements);
         }
 
+        /// <summary>
+        /// Consultation : une seule table = SQL du niveau 1 (colonnes non qualifiées) ;
+        /// dès qu'une table est jointe = SQL du niveau 2 (colonnes qualifiées par alias).
+        /// </summary>
         private ResultatGeneration GenererConsultation()
         {
-            RequeteConsultation requete = new RequeteConsultation();
-            requete.Table = pStructure.Table;
-            requete.ToutesColonnes = new List<ColonneInfo>(pStructure.Colonnes);
-            requete.Distinct = caseDistinct.Checked;
-            requete.AvecRrn = caseRrn.Checked;
-            requete.Limite = (int)champLimite.Value;
+            List<ColonneRequete> colonnes = new List<ColonneRequete>();
+            List<CritereTri> tris = TrisSaisis(colonnes);
+            List<CritereFiltre> criteres = CriteresSaisis();
 
+            if (pJointures.Count == 0)
+            {
+                RequeteConsultation simple = new RequeteConsultation();
+                simple.Table = pStructure.Table;
+                simple.ToutesColonnes = new List<ColonneInfo>(pStructure.Colonnes);
+                simple.Distinct = caseDistinct.Checked;
+                simple.AvecRrn = caseRrn.Checked;
+                simple.Limite = (int)champLimite.Value;
+                foreach (ColonneRequete colonne in colonnes) simple.Colonnes.Add(colonne.Colonne);
+                simple.Tris.AddRange(tris);
+                simple.Criteres.AddRange(criteres);
+                return GenerateurSqlSimple.ConstruireSelect(simple);
+            }
+
+            RequeteJointure requete = new RequeteJointure(pTables[0]);
+            requete.Jointures.AddRange(pJointures);
+            requete.Colonnes.AddRange(colonnes);
+            requete.Tris.AddRange(tris);
+            requete.Criteres.AddRange(criteres);
+            requete.Distinct = caseDistinct.Checked;
+            requete.Limite = (int)champLimite.Value;
+            ResultatGeneration resultat = GenerateurSqlJointure.ConstruireSelect(requete);
+            if (!caseRrn.Checked) return resultat;
+
+            // RRN() n'a de sens que pour une table seule : on le signale sans bloquer.
+            List<string> avertissements = new List<string>(resultat.Avertissements);
+            avertissements.Add("Le n° d'enregistrement (RRN) n'est proposé que pour une table seule : option ignorée.");
+            return new ResultatGeneration(resultat.Sql, new List<string>(resultat.Erreurs), avertissements);
+        }
+
+        /// <summary>Colonnes cochées (remplit <paramref name="colonnes"/>) et tris ordonnés par rang.</summary>
+        private List<CritereTri> TrisSaisis(List<ColonneRequete> colonnes)
+        {
             List<KeyValuePair<int, CritereTri>> tris = new List<KeyValuePair<int, CritereTri>>();
             foreach (DataGridViewRow ligne in grilleChoixColonnes.Rows)
             {
-                ColonneInfo colonne = (ColonneInfo)ligne.Tag;
-                if (true.Equals(ligne.Cells[colAfficher.Index].Value)) requete.Colonnes.Add(colonne);
+                ColonneRequete colonne = (ColonneRequete)ligne.Tag;
+                if (true.Equals(ligne.Cells[colAfficher.Index].Value)) colonnes.Add(colonne);
 
                 string sens = ligne.Cells[colTri.Index].Value as string;
                 if (string.IsNullOrEmpty(sens)) continue;
                 int rang;
                 if (!int.TryParse(Convert.ToString(ligne.Cells[colRangTri.Index].Value), out rang)) rang = 1000 + ligne.Index;
-                tris.Add(new KeyValuePair<int, CritereTri>(rang, new CritereTri(colonne, sens == "Décroissant")));
+                CritereTri tri = new CritereTri(colonne.Colonne, sens == "Décroissant");
+                tri.Table = colonne.Table;
+                tris.Add(new KeyValuePair<int, CritereTri>(rang, tri));
             }
             // Tri stable par rang (List.Sort ne l'est pas : on départage par l'ordre d'origine).
             List<KeyValuePair<int, KeyValuePair<int, CritereTri>>> ordonnes = new List<KeyValuePair<int, KeyValuePair<int, CritereTri>>>();
@@ -547,25 +771,31 @@ namespace SQLUtility.App
                 int comparaison = a.Value.Key.CompareTo(b.Value.Key);
                 return comparaison != 0 ? comparaison : a.Key.CompareTo(b.Key);
             });
-            foreach (KeyValuePair<int, KeyValuePair<int, CritereTri>> tri in ordonnes) requete.Tris.Add(tri.Value.Value);
+            List<CritereTri> resultat = new List<CritereTri>();
+            foreach (KeyValuePair<int, KeyValuePair<int, CritereTri>> tri in ordonnes) resultat.Add(tri.Value.Value);
+            return resultat;
+        }
 
+        private List<CritereFiltre> CriteresSaisis()
+        {
+            List<CritereFiltre> criteres = new List<CritereFiltre>();
             foreach (DataGridViewRow ligne in grilleFiltres.Rows)
             {
                 if (ligne.IsNewRow) continue;
-                ColonneInfo colonne = ColonneDuFiltre(ligne);
+                ColonneRequete colonne = ColonneDuFiltre(ligne);
                 string operateur = ligne.Cells[colFiltreOperateur.Index].Value as string;
                 if (colonne == null || operateur == null || !pOperateurs.ContainsKey(operateur)) continue;
 
                 CritereFiltre critere = new CritereFiltre();
-                critere.Colonne = colonne;
+                critere.Table = colonne.Table;
+                critere.Colonne = colonne.Colonne;
                 critere.Operateur = pOperateurs[operateur];
                 critere.Valeur = Convert.ToString(ligne.Cells[colFiltreValeur.Index].Value);
                 critere.Valeur2 = Convert.ToString(ligne.Cells[colFiltreValeur2.Index].Value);
                 critere.FormatDate = FormatChoisi(ligne.Cells[colFiltreFormat.Index].Value);
-                requete.Criteres.Add(critere);
+                criteres.Add(critere);
             }
-
-            return GenerateurSqlSimple.ConstruireSelect(requete);
+            return criteres;
         }
 
         private ResultatGeneration GenererLigne()
@@ -666,10 +896,10 @@ namespace SQLUtility.App
             return null;
         }
 
-        private ColonneInfo ColonneDuFiltre(DataGridViewRow ligne)
+        private ColonneRequete ColonneDuFiltre(DataGridViewRow ligne)
         {
             string libelle = ligne.Cells[colFiltreColonne.Index].Value as string;
-            ColonneInfo colonne;
+            ColonneRequete colonne;
             return libelle != null && pColonnesParLibelle.TryGetValue(libelle, out colonne) ? colonne : null;
         }
 
@@ -694,8 +924,24 @@ namespace SQLUtility.App
 
         private void Erreurs(IEnumerable<string> erreurs)
         {
+            Erreurs(erreurs, null);
+        }
+
+        /// <summary>Erreurs en rouge (insertion bloquée) ; sinon avertissements en orange (insertion permise).</summary>
+        private void Erreurs(IEnumerable<string> erreurs, IEnumerable<string> avertissements)
+        {
             List<string> liste = new List<string>(erreurs);
-            etiquetteErreurs.Text = string.Join(Environment.NewLine, liste);
+            List<string> attention = avertissements != null ? new List<string>(avertissements) : new List<string>();
+            if (liste.Count > 0)
+            {
+                etiquetteErreurs.ForeColor = System.Drawing.Color.DarkRed;
+                etiquetteErreurs.Text = string.Join(Environment.NewLine, liste);
+            }
+            else
+            {
+                etiquetteErreurs.ForeColor = System.Drawing.Color.FromArgb(160, 82, 0);
+                etiquetteErreurs.Text = attention.Count == 0 ? string.Empty : "Attention : " + string.Join(Environment.NewLine, attention);
+            }
             boutonInserer.Enabled = liste.Count == 0 && !string.IsNullOrEmpty(apercuSql.Text);
         }
 

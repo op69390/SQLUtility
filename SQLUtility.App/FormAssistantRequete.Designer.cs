@@ -23,6 +23,17 @@
             this.etiquetteTable = new System.Windows.Forms.Label();
             this.listeTables = new System.Windows.Forms.ComboBox();
             this.boutonChargerTable = new System.Windows.Forms.Button();
+            this.boutonJoindre = new System.Windows.Forms.Button();
+            this.panneauTables = new System.Windows.Forms.Panel();
+            this.etiquetteTables = new System.Windows.Forms.Label();
+            this.grilleTables = new System.Windows.Forms.DataGridView();
+            this.colTAlias = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colTTable = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colTJointure = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colTConditions = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.boutonModifierJointure = new System.Windows.Forms.Button();
+            this.boutonRetirerTable = new System.Windows.Forms.Button();
+            this.colTableC = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.etiquetteInfoTable = new System.Windows.Forms.Label();
             this.onglets = new System.Windows.Forms.TabControl();
             this.ongletConsulter = new System.Windows.Forms.TabPage();
@@ -83,6 +94,8 @@
             this.separateurConsulter.Panel2.SuspendLayout();
             this.separateurConsulter.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grilleChoixColonnes)).BeginInit();
+            this.panneauTables.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.grilleTables)).BeginInit();
             this.panneauOptions.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.champLimite)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.grilleFiltres)).BeginInit();
@@ -96,6 +109,7 @@
             // panneauTable
             //
             this.panneauTable.Controls.Add(this.etiquetteInfoTable);
+            this.panneauTable.Controls.Add(this.boutonJoindre);
             this.panneauTable.Controls.Add(this.boutonChargerTable);
             this.panneauTable.Controls.Add(this.listeTables);
             this.panneauTable.Controls.Add(this.etiquetteTable);
@@ -159,6 +173,114 @@
             this.boutonChargerTable.UseVisualStyleBackColor = true;
             this.boutonChargerTable.Click += new System.EventHandler(this.boutonChargerTable_Click);
             //
+            // boutonJoindre
+            //
+            this.boutonJoindre.Location = new System.Drawing.Point(714, 8);
+            this.boutonJoindre.Name = "boutonJoindre";
+            this.boutonJoindre.Size = new System.Drawing.Size(140, 25);
+            this.boutonJoindre.TabIndex = 5;
+            this.boutonJoindre.Text = "Joindre cette table…";
+            this.boutonJoindre.UseVisualStyleBackColor = true;
+            this.boutonJoindre.Click += new System.EventHandler(this.boutonJoindre_Click);
+            //
+            // panneauTables
+            //
+            this.panneauTables.Controls.Add(this.boutonRetirerTable);
+            this.panneauTables.Controls.Add(this.boutonModifierJointure);
+            this.panneauTables.Controls.Add(this.grilleTables);
+            this.panneauTables.Controls.Add(this.etiquetteTables);
+            this.panneauTables.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panneauTables.Location = new System.Drawing.Point(0, 0);
+            this.panneauTables.Name = "panneauTables";
+            this.panneauTables.Size = new System.Drawing.Size(976, 122);
+            this.panneauTables.TabIndex = 0;
+            //
+            // etiquetteTables
+            //
+            this.etiquetteTables.AutoSize = true;
+            this.etiquetteTables.Location = new System.Drawing.Point(6, 5);
+            this.etiquetteTables.Name = "etiquetteTables";
+            this.etiquetteTables.Size = new System.Drawing.Size(300, 13);
+            this.etiquetteTables.TabIndex = 0;
+            this.etiquetteTables.Text = "Tables de la requête (dans les filtres, colonnes sans préfixe = table A) :";
+            //
+            // grilleTables
+            //
+            this.grilleTables.AllowUserToAddRows = false;
+            this.grilleTables.AllowUserToDeleteRows = false;
+            this.grilleTables.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom)
+            | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.grilleTables.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.grilleTables.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.grilleTables.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.colTAlias,
+            this.colTTable,
+            this.colTJointure,
+            this.colTConditions});
+            this.grilleTables.Location = new System.Drawing.Point(6, 22);
+            this.grilleTables.MultiSelect = false;
+            this.grilleTables.Name = "grilleTables";
+            this.grilleTables.ReadOnly = true;
+            this.grilleTables.RowHeadersVisible = false;
+            this.grilleTables.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.grilleTables.Size = new System.Drawing.Size(818, 96);
+            this.grilleTables.TabIndex = 1;
+            this.grilleTables.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.grilleTables_CellDoubleClick);
+            //
+            // colTAlias
+            //
+            this.colTAlias.FillWeight = 25F;
+            this.colTAlias.HeaderText = "Alias";
+            this.colTAlias.Name = "colTAlias";
+            //
+            // colTTable
+            //
+            this.colTTable.FillWeight = 150F;
+            this.colTTable.HeaderText = "Table";
+            this.colTTable.Name = "colTTable";
+            //
+            // colTJointure
+            //
+            this.colTJointure.FillWeight = 110F;
+            this.colTJointure.HeaderText = "Jointure";
+            this.colTJointure.Name = "colTJointure";
+            //
+            // colTConditions
+            //
+            this.colTConditions.FillWeight = 220F;
+            this.colTConditions.HeaderText = "Conditions";
+            this.colTConditions.Name = "colTConditions";
+            //
+            // boutonModifierJointure
+            //
+            this.boutonModifierJointure.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.boutonModifierJointure.Location = new System.Drawing.Point(832, 22);
+            this.boutonModifierJointure.Name = "boutonModifierJointure";
+            this.boutonModifierJointure.Size = new System.Drawing.Size(138, 24);
+            this.boutonModifierJointure.TabIndex = 2;
+            this.boutonModifierJointure.Text = "Modifier la jointure…";
+            this.boutonModifierJointure.UseVisualStyleBackColor = true;
+            this.boutonModifierJointure.Click += new System.EventHandler(this.boutonModifierJointure_Click);
+            //
+            // boutonRetirerTable
+            //
+            this.boutonRetirerTable.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right)));
+            this.boutonRetirerTable.Location = new System.Drawing.Point(832, 52);
+            this.boutonRetirerTable.Name = "boutonRetirerTable";
+            this.boutonRetirerTable.Size = new System.Drawing.Size(138, 24);
+            this.boutonRetirerTable.TabIndex = 3;
+            this.boutonRetirerTable.Text = "Retirer la table";
+            this.boutonRetirerTable.UseVisualStyleBackColor = true;
+            this.boutonRetirerTable.Click += new System.EventHandler(this.boutonRetirerTable_Click);
+            //
+            // colTableC
+            //
+            this.colTableC.FillWeight = 30F;
+            this.colTableC.HeaderText = "Table";
+            this.colTableC.Name = "colTableC";
+            this.colTableC.ReadOnly = true;
+            //
             // etiquetteInfoTable
             //
             this.etiquetteInfoTable.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
@@ -203,13 +325,14 @@
             //
             this.separateurConsulter.Panel1.Controls.Add(this.grilleChoixColonnes);
             this.separateurConsulter.Panel1.Controls.Add(this.panneauOptions);
+            this.separateurConsulter.Panel1.Controls.Add(this.panneauTables);
             //
             // separateurConsulter.Panel2
             //
             this.separateurConsulter.Panel2.Controls.Add(this.grilleFiltres);
             this.separateurConsulter.Panel2.Controls.Add(this.etiquetteFiltres);
             this.separateurConsulter.Size = new System.Drawing.Size(976, 441);
-            this.separateurConsulter.SplitterDistance = 270;
+            this.separateurConsulter.SplitterDistance = 320;
             this.separateurConsulter.TabIndex = 0;
             //
             // panneauOptions
@@ -307,6 +430,7 @@
             this.grilleChoixColonnes.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             this.grilleChoixColonnes.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
             this.colAfficher,
+            this.colTableC,
             this.colNom,
             this.colLibelle,
             this.colType,
@@ -707,7 +831,7 @@
             this.ShowIcon = false;
             this.ShowInTaskbar = false;
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text = "Assistant de requête — une table";
+            this.Text = "Assistant de requête";
             this.panneauTable.ResumeLayout(false);
             this.panneauTable.PerformLayout();
             this.onglets.ResumeLayout(false);
@@ -717,6 +841,9 @@
             ((System.ComponentModel.ISupportInitialize)(this.separateurConsulter)).EndInit();
             this.separateurConsulter.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.grilleChoixColonnes)).EndInit();
+            this.panneauTables.ResumeLayout(false);
+            this.panneauTables.PerformLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.grilleTables)).EndInit();
             this.panneauOptions.ResumeLayout(false);
             this.panneauOptions.PerformLayout();
             ((System.ComponentModel.ISupportInitialize)(this.champLimite)).EndInit();
@@ -740,6 +867,17 @@
         private System.Windows.Forms.Label etiquetteTable;
         private System.Windows.Forms.ComboBox listeTables;
         private System.Windows.Forms.Button boutonChargerTable;
+        private System.Windows.Forms.Button boutonJoindre;
+        private System.Windows.Forms.Panel panneauTables;
+        private System.Windows.Forms.Label etiquetteTables;
+        private System.Windows.Forms.DataGridView grilleTables;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colTAlias;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colTTable;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colTJointure;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colTConditions;
+        private System.Windows.Forms.Button boutonModifierJointure;
+        private System.Windows.Forms.Button boutonRetirerTable;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colTableC;
         private System.Windows.Forms.Label etiquetteInfoTable;
         private System.Windows.Forms.TabControl onglets;
         private System.Windows.Forms.TabPage ongletConsulter;

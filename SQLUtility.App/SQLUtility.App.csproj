@@ -93,6 +93,12 @@
     <Compile Include="FormAssistantRequete.Designer.cs">
       <DependentUpon>FormAssistantRequete.cs</DependentUpon>
     </Compile>
+    <Compile Include="FormJointure.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="FormJointure.Designer.cs">
+      <DependentUpon>FormJointure.cs</DependentUpon>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>
