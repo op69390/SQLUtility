@@ -51,6 +51,7 @@
     <Compile Include="Parametres\ParametresApplication.cs" />
     <Compile Include="Parametres\GestionnaireParametres.cs" />
     <Compile Include="Providers\Db2ForIConnexionProvider.cs" />
+    <Compile Include="Providers\TransactionExecutionOdbc.cs" />
     <Compile Include="Providers\ConnexionProviderFactory.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

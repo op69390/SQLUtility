@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Globalization;
 using SQLUtility.Core.Catalogue;
 using SQLUtility.Core.Connexions;
+using SQLUtility.Core.Execution;
 using SQLUtility.Data.Securite;
 
 namespace SQLUtility.Data.Providers
@@ -354,11 +355,136 @@ namespace SQLUtility.Data.Providers
             }
         }
 
+        // ---- Exécution (EF-22 à EF-32) ----
+
+        /// <summary>Délai d'exécution d'une instruction, en secondes (fichiers Atlas volumineux).</summary>
+        public const int DelaiExecutionSecondes = 300;
+
+        public ResultatRequete ExecuterSelect(ConnexionProfil profil, string sql, int limiteLignes)
+        {
+            if (profil == null) throw new ArgumentNullException(nameof(profil));
+            if (string.IsNullOrWhiteSpace(sql)) throw new ArgumentNullException(nameof(sql));
+            if (limiteLignes < 1) throw new ArgumentOutOfRangeException(nameof(limiteLignes));
+
+            List<string> colonnes = new List<string>();
+            List<object[]> lignes = new List<object[]>();
+            bool tronque = false;
+
+            // Lecture seule forcée : une consultation ne doit jamais pouvoir modifier.
+            using (OdbcConnection connexion = new OdbcConnection(ConstruireChaineConnexion(profil, true, null)))
+            using (OdbcCommand commande = new OdbcCommand(sql, connexion))
+            {
+                commande.CommandTimeout = DelaiExecutionSecondes;
+                connexion.Open();
+                using (OdbcDataReader lecteur = commande.ExecuteReader())
+                {
+                    for (int i = 0; i < lecteur.FieldCount; i++)
+                        colonnes.Add(lecteur.GetName(i));
+
+                    while (lecteur.Read())
+                    {
+                        if (lignes.Count >= limiteLignes)
+                        {
+                            tronque = true;
+                            break;
+                        }
+                        object[] valeurs = new object[lecteur.FieldCount];
+                        for (int i = 0; i < valeurs.Length; i++)
+                            valeurs[i] = LireValeur(lecteur, i);
+                        lignes.Add(valeurs);
+                    }
+                }
+            }
+            return new ResultatRequete(colonnes, lignes, tronque);
+        }
+
+        public long CompterLignes(ConnexionProfil profil, string sqlComptage)
+        {
+            if (profil == null) throw new ArgumentNullException(nameof(profil));
+            if (string.IsNullOrWhiteSpace(sqlComptage)) throw new ArgumentNullException(nameof(sqlComptage));
+
+            using (OdbcConnection connexion = new OdbcConnection(ConstruireChaineConnexion(profil, true, null)))
+            using (OdbcCommand commande = new OdbcCommand(sqlComptage, connexion))
+            {
+                commande.CommandTimeout = DelaiExecutionSecondes;
+                connexion.Open();
+                object resultat = commande.ExecuteScalar();
+                return resultat == null || resultat == DBNull.Value ? 0 : Convert.ToInt64(resultat, CultureInfo.InvariantCulture);
+            }
+        }
+
+        public ITransactionExecution ExecuterModification(ConnexionProfil profil, string sql, bool sousControleValidation)
+        {
+            if (profil == null) throw new ArgumentNullException(nameof(profil));
+            if (string.IsNullOrWhiteSpace(sql)) throw new ArgumentNullException(nameof(sql));
+            // EF-06 : défense en profondeur, l'interface bloque déjà ce cas.
+            if (profil.LectureSeule)
+                throw new InvalidOperationException("Le profil « " + profil.Nom + " » est en lecture seule : modification refusée.");
+
+            // Sans contrôle de validation : CommitMode 0 (*NONE). Sinon le mode par défaut du
+            // pilote (*CHG) provoquerait SQL7008 sur un fichier non journalisé.
+            OdbcConnection connexion = new OdbcConnection(
+                ConstruireChaineConnexion(profil, false, sousControleValidation ? null : "0"));
+            OdbcTransaction transaction = null;
+            try
+            {
+                connexion.Open();
+                // ReadCommitted = *CS : lit les seules données validées, verrouille les lignes modifiées.
+                if (sousControleValidation)
+                    transaction = connexion.BeginTransaction(System.Data.IsolationLevel.ReadCommitted);
+
+                int lignes;
+                using (OdbcCommand commande = new OdbcCommand(sql, connexion, transaction))
+                {
+                    commande.CommandTimeout = DelaiExecutionSecondes;
+                    lignes = commande.ExecuteNonQuery();
+                }
+
+                if (transaction != null)
+                    return new TransactionExecutionOdbc(connexion, transaction, lignes);
+
+                connexion.Dispose();
+                return new TransactionExecutionOdbc(lignes);
+            }
+            catch
+            {
+                if (transaction != null)
+                {
+                    try { transaction.Rollback(); }
+                    catch (Exception ex) { Trace.WriteLine("ExecuterModification : ROLLBACK après erreur en échec : " + ex.Message); }
+                    transaction.Dispose();
+                }
+                connexion.Dispose();
+                throw;
+            }
+        }
+
+        private static object LireValeur(OdbcDataReader lecteur, int index)
+        {
+            if (lecteur.IsDBNull(index)) return null;
+            try
+            {
+                return lecteur.GetValue(index);
+            }
+            catch (Exception ex)
+            {
+                // Type que le pilote ne sait pas convertir (DECFLOAT, binaire...) : la ligne reste lisible.
+                return "(illisible : " + ex.Message + ")";
+            }
+        }
+
+        private static string ConstruireChaineConnexion(ConnexionProfil profil)
+        {
+            return ConstruireChaineConnexion(profil, false, null);
+        }
+
         /// <summary>
         /// Construit la chaîne de connexion ODBC IBM i Access à partir du profil.
-        /// La lecture seule (EF-06) est appliquée via l'attribut ConnectionType.
+        /// La lecture seule (EF-06) est appliquée via l'attribut ConnectionType ;
+        /// <paramref name="forcerLectureSeule"/> l'impose quel que soit le profil.
         /// </summary>
-        private static string ConstruireChaineConnexion(ConnexionProfil profil)
+        /// <param name="modeValidation">Attribut CommitMode du pilote (0 = *NONE), ou null pour le défaut.</param>
+        private static string ConstruireChaineConnexion(ConnexionProfil profil, bool forcerLectureSeule, string modeValidation)
         {
             OdbcConnectionStringBuilder builder = new OdbcConnectionStringBuilder();
             builder.Driver = PiloteOdbcParDefaut;
@@ -377,7 +503,10 @@ namespace SQLUtility.Data.Providers
                 builder["DefaultLibraries"] = profil.BibliothequeParDefaut;
 
             // ConnectionType : 0 = lecture/écriture, 1 = lecture/appel, 2 = lecture seule.
-            builder["ConnectionType"] = profil.LectureSeule ? "2" : "0";
+            builder["ConnectionType"] = (profil.LectureSeule || forcerLectureSeule) ? "2" : "0";
+
+            if (!string.IsNullOrEmpty(modeValidation))
+                builder["CommitMode"] = modeValidation;
 
             return builder.ConnectionString;
         }

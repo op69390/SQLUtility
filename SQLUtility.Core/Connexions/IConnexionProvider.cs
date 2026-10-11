@@ -1,5 +1,6 @@
 ﻿using System.Collections.Generic;
 using SQLUtility.Core.Catalogue;
+using SQLUtility.Core.Execution;
 
 namespace SQLUtility.Core.Connexions
 {
@@ -38,5 +39,21 @@ namespace SQLUtility.Core.Connexions
         /// et conditionne l'avertissement renforcé avant exécution. (EF-30)
         /// </summary>
         bool EstJournalisee(ConnexionProfil profil, string schema, string table);
+
+        /// <summary>
+        /// Exécute une requête de consultation sur une connexion forcée en lecture seule,
+        /// quel que soit le profil. Lit au plus <paramref name="limiteLignes"/> lignes. (EF-22)
+        /// </summary>
+        ResultatRequete ExecuterSelect(ConnexionProfil profil, string sql, int limiteLignes);
+
+        /// <summary>Exécute un SELECT COUNT(*) et retourne le nombre obtenu. (EF-26)</summary>
+        long CompterLignes(ConnexionProfil profil, string sqlComptage);
+
+        /// <summary>
+        /// Exécute un DML / DDL. Si <paramref name="sousControleValidation"/> est vrai, la
+        /// transaction reste ouverte jusqu'à Valider / Annuler (la table doit être journalisée) ;
+        /// sinon l'instruction est validée immédiatement. Refusé sur un profil en lecture seule (EF-06).
+        /// </summary>
+        ITransactionExecution ExecuterModification(ConnexionProfil profil, string sql, bool sousControleValidation);
     }
 }

@@ -1,11 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Data;
+using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.Runtime.InteropServices;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using SQLUtility.Core.Catalogue;
 using SQLUtility.Core.Connexions;
 using SQLUtility.Core.Edition;
+using SQLUtility.Core.Execution;
 using SQLUtility.Core.Optimisation;
 using SQLUtility.Data.Parametres;
 using SQLUtility.Data.Providers;
@@ -40,6 +45,11 @@ namespace SQLUtility.App
         private ConnexionProfil pProfilCatalogue;
         private IConnexionProvider pProviderCatalogue;
         private bool pChargementConnexionsEditeur;
+
+        // Exécution (EF-22 à EF-32) : une seule instruction à la fois, une transaction au plus.
+        private bool pExecutionEnCours;
+        private ITransactionExecution pTransactionEnCours;
+        private string pDescriptionTransaction;
 
         public FormEditeurSql(ParametresApplication parametres)
         {
@@ -422,6 +432,311 @@ namespace SQLUtility.App
             etiquetteStatut.Text = pResultats.Count == 0
                 ? "Analyse : aucun problème détecté."
                 : "Analyse : " + pResultats.Count + " résultat(s).";
+            ongletsBas.SelectedTab = ongletAnalyse;
+        }
+
+        // ----------------------------------------------------------------- Exécution (EF-22 à EF-32)
+
+        private void boutonExecuter_Click(object sender, EventArgs e)
+        {
+            Executer();
+        }
+
+        private void FormEditeurSql_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.F5 && !e.Control && !e.Shift && !e.Alt)
+            {
+                MasquerPopup();
+                Executer();
+                e.Handled = true;
+                e.SuppressKeyPress = true;
+            }
+        }
+
+        /// <summary>
+        /// Exécute la sélection, sinon tout le texte, à condition qu'il ne contienne qu'une
+        /// instruction. SELECT : en lecture seule forcée. DML / DDL : table cible, journalisation,
+        /// comptage préalable, confirmation graduée, puis transaction si la table est journalisée.
+        /// </summary>
+        private async void Executer()
+        {
+            if (pExecutionEnCours) return;
+            if (pTransactionEnCours != null)
+            {
+                Statut("Validez (COMMIT) ou annulez (ROLLBACK) d'abord la transaction en cours.");
+                return;
+            }
+
+            string texte = zoneEditeur.SelectionLength > 0 ? zoneEditeur.SelectedText : zoneEditeur.Text;
+            IReadOnlyList<string> instructions = DecoupeurInstructions.Decouper(texte);
+            if (instructions.Count == 0)
+            {
+                Statut("Rien à exécuter.");
+                return;
+            }
+            if (instructions.Count > 1)
+            {
+                Statut(instructions.Count + " instructions : sélectionnez celle à exécuter (une à la fois).");
+                return;
+            }
+            string sql = instructions[0];
+
+            ConnexionProfil profil = pProfilCatalogue;
+            IConnexionProvider provider = pProviderCatalogue;
+            if (profil == null || provider == null)
+            {
+                Statut("Choisissez d'abord une connexion (liste « Connexion / schéma »).");
+                listeConnexionsEditeur.Focus();
+                return;
+            }
+
+            TypeInstructionSql type = AnalyseurInstruction.DetecterType(sql);
+            if (type != TypeInstructionSql.Select && profil.LectureSeule)
+            {
+                MessageBox.Show(this,
+                    "Le profil « " + profil.Nom + " » est en lecture seule (EF-06) : seules les consultations sont permises." + Environment.NewLine + Environment.NewLine +
+                    "Pour modifier des données, décochez « Lecture seule » dans Connexions > Gérer les connexions.",
+                    "Modification refusée", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            int limite = (int)champLimite.Value;
+            DebuterExecution();
+            try
+            {
+                if (type == TypeInstructionSql.Select)
+                {
+                    Statut("Exécution de la requête…");
+                    Stopwatch chrono = Stopwatch.StartNew();
+                    ResultatRequete resultat = await Task.Run(() => provider.ExecuterSelect(profil, sql, limite));
+                    chrono.Stop();
+                    AfficherResultat(resultat);
+                    Statut(resultat.Lignes.Count.ToString("N0", CultureInfo.CurrentCulture) + " ligne(s)"
+                        + (resultat.Tronque ? " — limite atteinte, résultat TRONQUÉ" : string.Empty)
+                        + " en " + Duree(chrono) + ".");
+                    return;
+                }
+
+                await ExecuterModification(profil, provider, sql, type);
+            }
+            catch (Exception ex)
+            {
+                Statut("Erreur : " + ex.Message);
+                MessageBox.Show(this, ex.Message, "Erreur d'exécution", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            finally
+            {
+                TerminerExecution();
+            }
+        }
+
+        private async Task ExecuterModification(ConnexionProfil profil, IConnexionProvider provider, string sql, TypeInstructionSql type)
+        {
+            // EF-30 : table cible et journalisation. Table non identifiée = non journalisée (prudence).
+            Statut("Analyse de l'instruction…");
+            TableCible cible = TableCible.Extraire(sql, profil.BibliothequeParDefaut);
+            bool journalisee = cible != null
+                && await Task.Run(() => provider.EstJournalisee(profil, cible.Schema, cible.Nom));
+
+            // Transaction seulement pour un DML sur table journalisée (le DDL et CALL valident immédiatement).
+            bool estDml = type == TypeInstructionSql.Insert || type == TypeInstructionSql.Update
+                || type == TypeInstructionSql.Delete || (type == TypeInstructionSql.Autre && cible != null);
+            bool sousControle = estDml && journalisee;
+            EvaluationRisque evaluation = AnalyseurInstruction.Evaluer(sql, journalisee);
+
+            // EF-26 : comptage préalable des lignes visées par un UPDATE / DELETE.
+            long? lignesEstimees = null;
+            string comptage = AnalyseurInstruction.ConstruireComptage(sql);
+            if (comptage != null)
+            {
+                Statut("Comptage des lignes concernées…");
+                try
+                {
+                    lignesEstimees = await Task.Run(() => provider.CompterLignes(profil, comptage));
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine("Comptage préalable impossible : " + ex.Message);
+                }
+            }
+
+            string titre = "Confirmer — risque " + MessageConfirmation.LibelleNiveau(evaluation.Niveau).ToLowerInvariant();
+            MessageBoxIcon icone = evaluation.Niveau >= NiveauRisque.Eleve ? MessageBoxIcon.Warning : MessageBoxIcon.Question;
+            if (MessageBox.Show(this, MessageConfirmation.Construire(sql, evaluation, cible, lignesEstimees, sousControle),
+                    titre, MessageBoxButtons.YesNo, icone, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            {
+                Statut("Exécution abandonnée.");
+                return;
+            }
+            if (evaluation.ConfirmationRenforcee
+                && MessageBox.Show(this, MessageConfirmation.ConstruireRenforcee(evaluation, lignesEstimees, sousControle),
+                    "Dernière confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Stop, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            {
+                Statut("Exécution abandonnée.");
+                return;
+            }
+
+            Statut("Exécution…");
+            ITransactionExecution transaction = await Task.Run(() => provider.ExecuterModification(profil, sql, sousControle));
+            if (transaction.SousControleValidation)
+            {
+                pTransactionEnCours = transaction;
+                pDescriptionTransaction = LibelleLignes(transaction.LignesAffectees) + " sur " + cible;
+                AfficherTransaction();
+                return;
+            }
+
+            int lignes = transaction.LignesAffectees;
+            transaction.Dispose();
+            Statut(LibelleLignes(lignes) + " — validé immédiatement (sans retour arrière possible).");
+        }
+
+        private void boutonValider_Click(object sender, EventArgs e)
+        {
+            TerminerTransaction(true);
+        }
+
+        private void boutonAnnuler_Click(object sender, EventArgs e)
+        {
+            TerminerTransaction(false);
+        }
+
+        /// <summary>COMMIT ou ROLLBACK de la transaction en cours ; retourne faux en cas d'échec.</summary>
+        private bool TerminerTransaction(bool valider)
+        {
+            if (pTransactionEnCours == null) return true;
+            try
+            {
+                if (valider) pTransactionEnCours.Valider();
+                else pTransactionEnCours.Annuler();
+                pTransactionEnCours.Dispose();
+                pTransactionEnCours = null;
+                panneauTransaction.Visible = false;
+                Statut((valider ? "COMMIT effectué : " : "ROLLBACK effectué : ") + pDescriptionTransaction
+                    + (valider ? " validé(es)." : " annulé(es)."));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Statut("Échec du " + (valider ? "COMMIT" : "ROLLBACK") + " : " + ex.Message);
+                MessageBox.Show(this, ex.Message, "Échec du " + (valider ? "COMMIT" : "ROLLBACK"),
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return false;
+            }
+        }
+
+        private void FormEditeurSql_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (pExecutionEnCours)
+            {
+                MessageBox.Show(this, "Une instruction est en cours d'exécution : attendez sa fin avant de fermer.",
+                    "Fermeture impossible", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                e.Cancel = true;
+                return;
+            }
+            if (pTransactionEnCours == null) return;
+
+            DialogResult choix = MessageBox.Show(this,
+                "Une transaction est en attente : " + pDescriptionTransaction + "." + Environment.NewLine + Environment.NewLine +
+                "Oui : valider (COMMIT)" + Environment.NewLine +
+                "Non : annuler (ROLLBACK)" + Environment.NewLine +
+                "Annuler : ne pas fermer",
+                "Transaction en attente", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2);
+            if (choix == DialogResult.Cancel || !TerminerTransaction(choix == DialogResult.Yes))
+                e.Cancel = true;
+        }
+
+        private void AfficherTransaction()
+        {
+            etiquetteTransaction.Text = "Transaction EN ATTENTE : " + pDescriptionTransaction + "." + Environment.NewLine
+                + "Les lignes restent verrouillées pour les autres utilisateurs d'Atlas jusqu'au COMMIT ou ROLLBACK.";
+            panneauTransaction.Visible = true;
+            Statut("Exécuté : " + pDescriptionTransaction + " — à valider ou annuler.");
+        }
+
+        private void AfficherResultat(ResultatRequete resultat)
+        {
+            grilleResultats.DataSource = null;
+            grilleResultats.DataSource = ConstruireTable(resultat);
+            grilleResultats.DefaultCellStyle.NullValue = "NULL";
+            foreach (DataGridViewColumn colonne in grilleResultats.Columns)
+                colonne.AutoSizeMode = DataGridViewAutoSizeColumnMode.DisplayedCells;
+            ongletsBas.SelectedTab = ongletResultats;
+        }
+
+        /// <summary>
+        /// Convertit le résultat en DataTable (liaison rapide et tri par colonne). Les noms en
+        /// double (jointures) sont suffixés ; le type d'une colonne est celui de ses valeurs s'il
+        /// est homogène, sinon object.
+        /// </summary>
+        internal static DataTable ConstruireTable(ResultatRequete resultat)
+        {
+            DataTable table = new DataTable("Resultat");
+            table.Locale = CultureInfo.CurrentCulture;
+            HashSet<string> nomsPris = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (int i = 0; i < resultat.Colonnes.Count; i++)
+            {
+                string nom = string.IsNullOrEmpty(resultat.Colonnes[i]) ? "COL" + (i + 1) : resultat.Colonnes[i];
+                string nomUnique = nom;
+                for (int n = 2; !nomsPris.Add(nomUnique); n++) nomUnique = nom + "_" + n;
+                table.Columns.Add(nomUnique, TypeHomogene(resultat, i));
+            }
+
+            table.BeginLoadData();
+            foreach (object[] ligne in resultat.Lignes)
+            {
+                object[] valeurs = new object[ligne.Length];
+                for (int i = 0; i < ligne.Length; i++) valeurs[i] = ligne[i] ?? DBNull.Value;
+                table.Rows.Add(valeurs);
+            }
+            table.EndLoadData();
+            return table;
+        }
+
+        private static Type TypeHomogene(ResultatRequete resultat, int index)
+        {
+            Type type = null;
+            foreach (object[] ligne in resultat.Lignes)
+            {
+                object valeur = ligne[index];
+                if (valeur == null) continue;
+                if (type == null) type = valeur.GetType();
+                else if (type != valeur.GetType()) return typeof(object);
+            }
+            return type ?? typeof(string);
+        }
+
+        private void DebuterExecution()
+        {
+            pExecutionEnCours = true;
+            boutonExecuter.Enabled = false;
+            UseWaitCursor = true;
+        }
+
+        private void TerminerExecution()
+        {
+            pExecutionEnCours = false;
+            boutonExecuter.Enabled = true;
+            UseWaitCursor = false;
+        }
+
+        private static string LibelleLignes(int lignes)
+        {
+            // Un DDL renvoie -1 : pas de nombre de lignes significatif.
+            return lignes < 0 ? "instruction exécutée" : lignes.ToString("N0", CultureInfo.CurrentCulture) + " ligne(s)";
+        }
+
+        private static string Duree(Stopwatch chrono)
+        {
+            return chrono.Elapsed.TotalSeconds < 1
+                ? chrono.ElapsedMilliseconds + " ms"
+                : chrono.Elapsed.TotalSeconds.ToString("0.0", CultureInfo.CurrentCulture) + " s";
+        }
+
+        private void Statut(string message)
+        {
+            etiquetteStatut.Text = message;
         }
 
         private static string FormaterResultat(ResultatAnalyse resultat)
