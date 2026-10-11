@@ -74,6 +74,8 @@
     <Compile Include="Assistant\ModeleJointure.cs" />
     <Compile Include="Assistant\DetecteurJointures.cs" />
     <Compile Include="Assistant\GenerateurSqlJointure.cs" />
+    <Compile Include="Assistant\ModeleAgregat.cs" />
+    <Compile Include="Assistant\GenerateurSqlAgregat.cs" />
     <Compile Include="Optimisation\Severite.cs" />
     <Compile Include="Optimisation\ResultatAnalyse.cs" />
     <Compile Include="Optimisation\IRegleAnalyse.cs" />

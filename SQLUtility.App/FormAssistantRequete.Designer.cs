@@ -46,6 +46,10 @@
             this.colCle = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.colTri = new System.Windows.Forms.DataGridViewComboBoxColumn();
             this.colRangTri = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colCalcul = new System.Windows.Forms.DataGridViewComboBoxColumn();
+            this.colFormatC = new System.Windows.Forms.DataGridViewComboBoxColumn();
+            this.caseCompter = new System.Windows.Forms.CheckBox();
+            this.colFiltrePorte = new System.Windows.Forms.DataGridViewComboBoxColumn();
             this.panneauOptions = new System.Windows.Forms.Panel();
             this.boutonToutCocher = new System.Windows.Forms.Button();
             this.boutonToutDecocher = new System.Windows.Forms.Button();
@@ -337,6 +341,7 @@
             //
             // panneauOptions
             //
+            this.panneauOptions.Controls.Add(this.caseCompter);
             this.panneauOptions.Controls.Add(this.etiquetteAideLimite);
             this.panneauOptions.Controls.Add(this.champLimite);
             this.panneauOptions.Controls.Add(this.etiquetteLimite);
@@ -436,7 +441,9 @@
             this.colType,
             this.colCle,
             this.colTri,
-            this.colRangTri});
+            this.colRangTri,
+            this.colCalcul,
+            this.colFormatC});
             this.grilleChoixColonnes.Dock = System.Windows.Forms.DockStyle.Fill;
             this.grilleChoixColonnes.EditMode = System.Windows.Forms.DataGridViewEditMode.EditOnEnter;
             this.grilleChoixColonnes.Location = new System.Drawing.Point(0, 34);
@@ -446,6 +453,7 @@
             this.grilleChoixColonnes.TabIndex = 1;
             this.grilleChoixColonnes.CellValueChanged += new System.Windows.Forms.DataGridViewCellEventHandler(this.Grille_CellValueChanged);
             this.grilleChoixColonnes.CurrentCellDirtyStateChanged += new System.EventHandler(this.Grille_CurrentCellDirtyStateChanged);
+            this.grilleChoixColonnes.DataError += new System.Windows.Forms.DataGridViewDataErrorEventHandler(this.Grille_DataError);
             //
             // colAfficher
             //
@@ -495,6 +503,38 @@
             this.colRangTri.Name = "colRangTri";
             this.colRangTri.ToolTipText = "Ordre des critères de tri (1, 2, 3...)";
             //
+            // colCalcul
+            //
+            this.colCalcul.FillWeight = 110F;
+            this.colCalcul.HeaderText = "Calcul (regroupement)";
+            this.colCalcul.Name = "colCalcul";
+            this.colCalcul.ToolTipText = "Regrouper sur cette colonne, ou la totaliser : la requête devient un GROUP BY";
+            //
+            // colFormatC
+            //
+            this.colFormatC.FillWeight = 100F;
+            this.colFormatC.HeaderText = "Date Atlas stockée en";
+            this.colFormatC.Name = "colFormatC";
+            this.colFormatC.ToolTipText = "Pour regrouper une date Atlas numérique par année, mois ou jour";
+            //
+            // caseCompter
+            //
+            this.caseCompter.AutoSize = true;
+            this.caseCompter.Location = new System.Drawing.Point(836, 9);
+            this.caseCompter.Name = "caseCompter";
+            this.caseCompter.Size = new System.Drawing.Size(110, 17);
+            this.caseCompter.TabIndex = 7;
+            this.caseCompter.Text = "Nombre de lignes";
+            this.caseCompter.UseVisualStyleBackColor = true;
+            this.caseCompter.CheckedChanged += new System.EventHandler(this.Saisie_Changee);
+            //
+            // colFiltrePorte
+            //
+            this.colFiltrePorte.FillWeight = 110F;
+            this.colFiltrePorte.HeaderText = "Porte sur";
+            this.colFiltrePorte.Name = "colFiltrePorte";
+            this.colFiltrePorte.ToolTipText = "Les lignes (WHERE) ou un calcul par groupe (HAVING)";
+            //
             // etiquetteFiltres
             //
             this.etiquetteFiltres.Dock = System.Windows.Forms.DockStyle.Top;
@@ -503,7 +543,7 @@
             this.etiquetteFiltres.Padding = new System.Windows.Forms.Padding(4, 4, 0, 0);
             this.etiquetteFiltres.Size = new System.Drawing.Size(976, 22);
             this.etiquetteFiltres.TabIndex = 0;
-            this.etiquetteFiltres.Text = "Filtres (tous combinés par ET) — dates : jj/mm/aaaa ; « dans la liste » : valeurs séparées par « ; ».";
+            this.etiquetteFiltres.Text = "Filtres (tous combinés par ET) — dates : jj/mm/aaaa ; « dans la liste » : valeurs séparées par « ; » ; « Porte sur » un calcul = filtre par groupe (HAVING).";
             //
             // grilleFiltres
             //
@@ -514,7 +554,8 @@
             this.colFiltreOperateur,
             this.colFiltreValeur,
             this.colFiltreValeur2,
-            this.colFiltreFormat});
+            this.colFiltreFormat,
+            this.colFiltrePorte});
             this.grilleFiltres.Dock = System.Windows.Forms.DockStyle.Fill;
             this.grilleFiltres.EditMode = System.Windows.Forms.DataGridViewEditMode.EditOnEnter;
             this.grilleFiltres.Location = new System.Drawing.Point(0, 22);
@@ -890,6 +931,10 @@
         private System.Windows.Forms.DataGridViewTextBoxColumn colCle;
         private System.Windows.Forms.DataGridViewComboBoxColumn colTri;
         private System.Windows.Forms.DataGridViewTextBoxColumn colRangTri;
+        private System.Windows.Forms.DataGridViewComboBoxColumn colCalcul;
+        private System.Windows.Forms.DataGridViewComboBoxColumn colFormatC;
+        private System.Windows.Forms.CheckBox caseCompter;
+        private System.Windows.Forms.DataGridViewComboBoxColumn colFiltrePorte;
         private System.Windows.Forms.Panel panneauOptions;
         private System.Windows.Forms.Button boutonToutCocher;
         private System.Windows.Forms.Button boutonToutDecocher;

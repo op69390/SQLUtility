@@ -35,6 +35,11 @@ namespace SQLUtility.App
         private readonly Dictionary<string, ColonneRequete> pColonnesParLibelle = new Dictionary<string, ColonneRequete>();
         private readonly Dictionary<string, OperateurFiltre> pOperateurs = new Dictionary<string, OperateurFiltre>();
         private readonly Dictionary<string, FormatDate> pFormats = new Dictionary<string, FormatDate>();
+
+        // Niveau 3 (EF-46 / EF-47) : calculs de la grille des colonnes et portée des filtres.
+        private const string PorteeLignes = "les lignes (WHERE)";
+        private readonly Dictionary<string, KeyValuePair<FonctionAgregat, PeriodeDate>> pCalculs = new Dictionary<string, KeyValuePair<FonctionAgregat, PeriodeDate>>();
+        private readonly Dictionary<string, FonctionAgregat> pPortees = new Dictionary<string, FonctionAgregat>();
         private bool pRemplissage;
 
         public FormAssistantRequete(ConnexionProfil profil, IConnexionProvider provider, string schemaInitial)
@@ -70,18 +75,54 @@ namespace SQLUtility.App
 
             colFiltreFormat.Items.Add(SansFormat);
             colVFormat.Items.Add(SansFormat);
+            colFormatC.Items.Add(SansFormat);
             foreach (DescriptionFormatDate description in ReferentielFormatsDate.Tous)
             {
                 if (!description.Numerique || !description.Implemente) continue;
                 pFormats[description.Libelle] = description.Format;
                 colFiltreFormat.Items.Add(description.Libelle);
                 colVFormat.Items.Add(description.Libelle);
+                colFormatC.Items.Add(description.Libelle);
             }
             // ISO stocké en numérique (AAAAMMJJ) : format DECIMAL(8,0) fréquent hors Atlas.
             string libelleIso = "AAAAMMJJ (numérique)";
             pFormats[libelleIso] = FormatDate.Iso;
             colFiltreFormat.Items.Add(libelleIso);
             colVFormat.Items.Add(libelleIso);
+            colFormatC.Items.Add(libelleIso);
+
+            colCalcul.Items.Add(string.Empty);
+            AjouterCalcul("Regrouper", FonctionAgregat.Regrouper, PeriodeDate.Aucune);
+            AjouterCalcul("Regrouper par année", FonctionAgregat.Regrouper, PeriodeDate.Annee);
+            AjouterCalcul("Regrouper par mois", FonctionAgregat.Regrouper, PeriodeDate.Mois);
+            AjouterCalcul("Regrouper par jour", FonctionAgregat.Regrouper, PeriodeDate.Jour);
+            AjouterCalcul("Somme", FonctionAgregat.Somme, PeriodeDate.Aucune);
+            AjouterCalcul("Nombre", FonctionAgregat.Nombre, PeriodeDate.Aucune);
+            AjouterCalcul("Nombre distinct", FonctionAgregat.NombreDistinct, PeriodeDate.Aucune);
+            AjouterCalcul("Minimum", FonctionAgregat.Minimum, PeriodeDate.Aucune);
+            AjouterCalcul("Maximum", FonctionAgregat.Maximum, PeriodeDate.Aucune);
+            AjouterCalcul("Moyenne", FonctionAgregat.Moyenne, PeriodeDate.Aucune);
+
+            colFiltrePorte.Items.Add(PorteeLignes);
+            AjouterPortee("la somme (HAVING)", FonctionAgregat.Somme);
+            AjouterPortee("le nombre (HAVING)", FonctionAgregat.Nombre);
+            AjouterPortee("le nombre distinct (HAVING)", FonctionAgregat.NombreDistinct);
+            AjouterPortee("le minimum (HAVING)", FonctionAgregat.Minimum);
+            AjouterPortee("le maximum (HAVING)", FonctionAgregat.Maximum);
+            AjouterPortee("la moyenne (HAVING)", FonctionAgregat.Moyenne);
+            AjouterPortee("le nombre de lignes du groupe (HAVING)", FonctionAgregat.NombreLignes);
+        }
+
+        private void AjouterCalcul(string libelle, FonctionAgregat fonction, PeriodeDate periode)
+        {
+            pCalculs[libelle] = new KeyValuePair<FonctionAgregat, PeriodeDate>(fonction, periode);
+            colCalcul.Items.Add(libelle);
+        }
+
+        private void AjouterPortee(string libelle, FonctionAgregat fonction)
+        {
+            pPortees[libelle] = fonction;
+            colFiltrePorte.Items.Add(libelle);
         }
 
         private void AjouterOperateur(string libelle, OperateurFiltre operateur)
@@ -292,7 +333,8 @@ namespace SQLUtility.App
                 foreach (ColonneInfo colonne in table.Structure.Colonnes)
                 {
                     string type = TypesSql.Libelle(colonne.TypeDonnee, colonne.Longueur, colonne.Echelle);
-                    int ligne = grilleChoixColonnes.Rows.Add(false, table.Alias, colonne.Nom, colonne.Libelle, type, colonne.RangCleTexte, "", "");
+                    int ligne = grilleChoixColonnes.Rows.Add(false, table.Alias, colonne.Nom, colonne.Libelle, type, colonne.RangCleTexte, "", "",
+                        string.Empty, FormatPropose(colonne));
                     grilleChoixColonnes.Rows[ligne].Tag = new ColonneRequete(table, colonne);
 
                     string libelle = LibelleColonne(table, colonne);
@@ -517,6 +559,7 @@ namespace SQLUtility.App
                 try
                 {
                     if (ligne.Cells[colFiltreOperateur.Index].Value == null) ligne.Cells[colFiltreOperateur.Index].Value = "=";
+                    if (ligne.Cells[colFiltrePorte.Index].Value == null) ligne.Cells[colFiltrePorte.Index].Value = PorteeLignes;
                     if (colonne != null) ligne.Cells[colFiltreFormat.Index].Value = FormatPropose(colonne.Colonne);
                 }
                 finally
@@ -712,6 +755,8 @@ namespace SQLUtility.App
         /// </summary>
         private ResultatGeneration GenererConsultation()
         {
+            if (ModeAgregat()) return GenererAgregat();
+
             List<ColonneRequete> colonnes = new List<ColonneRequete>();
             List<CritereTri> tris = TrisSaisis(colonnes);
             List<CritereFiltre> criteres = CriteresSaisis();
@@ -776,12 +821,111 @@ namespace SQLUtility.App
             return resultat;
         }
 
+        // ----------------------------------------------------------------- Agrégats (niveau 3, EF-46 / EF-47)
+
+        /// <summary>Mode agrégat : un calcul choisi, le nombre de lignes demandé, ou un filtre sur un calcul.</summary>
+        private bool ModeAgregat()
+        {
+            if (caseCompter.Checked) return true;
+            foreach (DataGridViewRow ligne in grilleChoixColonnes.Rows)
+                if (!string.IsNullOrEmpty(ligne.Cells[colCalcul.Index].Value as string)) return true;
+            foreach (DataGridViewRow ligne in grilleFiltres.Rows)
+                if (!ligne.IsNewRow && PorteeDuFiltre(ligne).HasValue) return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Requête GROUP BY : les colonnes avec un calcul, plus les colonnes cochées sans calcul
+        /// (regroupées). Les filtres « sur les lignes » vont au WHERE, ceux sur un calcul au HAVING.
+        /// </summary>
+        private ResultatGeneration GenererAgregat()
+        {
+            RequeteJointure baseRequete = new RequeteJointure(pTables[0]);
+            baseRequete.Jointures.AddRange(pJointures);
+            baseRequete.Criteres.AddRange(CriteresSaisis());
+            baseRequete.Limite = (int)champLimite.Value;
+            RequeteAgregat requete = new RequeteAgregat(baseRequete);
+
+            List<KeyValuePair<int, TriAgregat>> tris = new List<KeyValuePair<int, TriAgregat>>();
+            foreach (DataGridViewRow ligne in grilleChoixColonnes.Rows)
+            {
+                ColonneRequete colonne = (ColonneRequete)ligne.Tag;
+                string calcul = ligne.Cells[colCalcul.Index].Value as string;
+                ElementAgregat element = null;
+                KeyValuePair<FonctionAgregat, PeriodeDate> choix;
+                if (!string.IsNullOrEmpty(calcul) && pCalculs.TryGetValue(calcul, out choix))
+                {
+                    element = new ElementAgregat(colonne.Table, colonne.Colonne, choix.Key);
+                    element.Periode = choix.Value;
+                }
+                else if (true.Equals(ligne.Cells[colAfficher.Index].Value))
+                {
+                    element = new ElementAgregat(colonne.Table, colonne.Colonne, FonctionAgregat.Regrouper);
+                }
+                if (element != null)
+                {
+                    element.FormatDate = FormatChoisi(ligne.Cells[colFormatC.Index].Value);
+                    requete.Elements.Add(element);
+                }
+
+                string sens = ligne.Cells[colTri.Index].Value as string;
+                if (string.IsNullOrEmpty(sens)) continue;
+                int rang;
+                if (!int.TryParse(Convert.ToString(ligne.Cells[colRangTri.Index].Value), out rang)) rang = 1000 + ligne.Index;
+                // Sans élément, le générateur signale qu'on ne trie que sur le résultat.
+                tris.Add(new KeyValuePair<int, TriAgregat>(rang, new TriAgregat(element, sens == "Décroissant")));
+            }
+            if (caseCompter.Checked) requete.Elements.Add(new ElementAgregat(null, null, FonctionAgregat.NombreLignes));
+
+            List<KeyValuePair<int, KeyValuePair<int, TriAgregat>>> ordonnes = new List<KeyValuePair<int, KeyValuePair<int, TriAgregat>>>();
+            for (int i = 0; i < tris.Count; i++) ordonnes.Add(new KeyValuePair<int, KeyValuePair<int, TriAgregat>>(i, tris[i]));
+            ordonnes.Sort(delegate (KeyValuePair<int, KeyValuePair<int, TriAgregat>> a, KeyValuePair<int, KeyValuePair<int, TriAgregat>> b)
+            {
+                int comparaison = a.Value.Key.CompareTo(b.Value.Key);
+                return comparaison != 0 ? comparaison : a.Key.CompareTo(b.Key);
+            });
+            foreach (KeyValuePair<int, KeyValuePair<int, TriAgregat>> tri in ordonnes) requete.Tris.Add(tri.Value.Value);
+
+            foreach (DataGridViewRow ligne in grilleFiltres.Rows)
+            {
+                if (ligne.IsNewRow) continue;
+                FonctionAgregat? portee = PorteeDuFiltre(ligne);
+                string operateur = ligne.Cells[colFiltreOperateur.Index].Value as string;
+                if (!portee.HasValue || operateur == null || !pOperateurs.ContainsKey(operateur)) continue;
+                ColonneRequete colonne = ColonneDuFiltre(ligne);
+                if (colonne == null && portee.Value != FonctionAgregat.NombreLignes) continue;
+
+                ElementAgregat element = portee.Value == FonctionAgregat.NombreLignes
+                    ? new ElementAgregat(null, null, FonctionAgregat.NombreLignes)
+                    : new ElementAgregat(colonne.Table, colonne.Colonne, portee.Value);
+                element.FormatDate = FormatChoisi(ligne.Cells[colFiltreFormat.Index].Value);
+                requete.Having.Add(new CritereAgregat(element, pOperateurs[operateur],
+                    Convert.ToString(ligne.Cells[colFiltreValeur.Index].Value), Convert.ToString(ligne.Cells[colFiltreValeur2.Index].Value)));
+            }
+
+            ResultatGeneration resultat = GenerateurSqlAgregat.ConstruireSelect(requete);
+            List<string> avertissements = new List<string>(resultat.Avertissements);
+            if (caseDistinct.Checked) avertissements.Add("DISTINCT est sans objet avec un regroupement : option ignorée.");
+            if (caseRrn.Checked) avertissements.Add("Le n° d'enregistrement (RRN) n'a pas de sens par groupe : option ignorée.");
+            return new ResultatGeneration(resultat.Sql, new List<string>(resultat.Erreurs), avertissements);
+        }
+
+        /// <summary>Calcul visé par un filtre (HAVING), ou null pour un filtre sur les lignes (WHERE).</summary>
+        private FonctionAgregat? PorteeDuFiltre(DataGridViewRow ligne)
+        {
+            string libelle = ligne.Cells[colFiltrePorte.Index].Value as string;
+            FonctionAgregat fonction;
+            if (libelle != null && pPortees.TryGetValue(libelle, out fonction)) return fonction;
+            return null;
+        }
+
+        /// <summary>Filtres sur les lignes (WHERE) ; ceux qui portent sur un calcul vont au HAVING.</summary>
         private List<CritereFiltre> CriteresSaisis()
         {
             List<CritereFiltre> criteres = new List<CritereFiltre>();
             foreach (DataGridViewRow ligne in grilleFiltres.Rows)
             {
-                if (ligne.IsNewRow) continue;
+                if (ligne.IsNewRow || PorteeDuFiltre(ligne).HasValue) continue;
                 ColonneRequete colonne = ColonneDuFiltre(ligne);
                 string operateur = ligne.Cells[colFiltreOperateur.Index].Value as string;
                 if (colonne == null || operateur == null || !pOperateurs.ContainsKey(operateur)) continue;
