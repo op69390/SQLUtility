@@ -1,0 +1,74 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{A1B2C3D4-0001-4E5F-9A1B-000000000001}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>SQLUtility.Core</RootNamespace>
+    <AssemblyName>SQLUtility.Core</AssemblyName>
+    <TargetFrameworkVersion>v4.7.1</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <Deterministic>true</Deterministic>
+    <LangVersion>7.3</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Connexions\TypeSgbd.cs" />
+    <Compile Include="Connexions\ConnexionProfil.cs" />
+    <Compile Include="Connexions\ResultatTestConnexion.cs" />
+    <Compile Include="Connexions\IConnexionProvider.cs" />
+    <Compile Include="Catalogue\TableInfo.cs" />
+    <Compile Include="Catalogue\ColonneInfo.cs" />
+    <Compile Include="Catalogue\OrigineCle.cs" />
+    <Compile Include="Catalogue\CleInfo.cs" />
+    <Compile Include="Catalogue\RelationInfo.cs" />
+    <Compile Include="Catalogue\StructureTable.cs" />
+    <Compile Include="Catalogue\ConstructeurStructureTable.cs" />
+    <Compile Include="Dates\FormatDate.cs" />
+    <Compile Include="Dates\DescriptionFormatDate.cs" />
+    <Compile Include="Dates\ReferentielFormatsDate.cs" />
+    <Compile Include="Dates\ConvertisseurDate.cs" />
+    <Compile Include="Dates\GenerateurExpressionDate.cs" />
+    <Compile Include="Dates\ResultatDetectionDate.cs" />
+    <Compile Include="Dates\DetecteurFormatDate.cs" />
+    <Compile Include="Edition\TypeJetonSql.cs" />
+    <Compile Include="Edition\JetonSql.cs" />
+    <Compile Include="Edition\MotsClesSql.cs" />
+    <Compile Include="Edition\MoteurCompletion.cs" />
+    <Compile Include="Edition\TokeniseurSql.cs" />
+    <Compile Include="Execution\TypeInstructionSql.cs" />
+    <Compile Include="Execution\NiveauRisque.cs" />
+    <Compile Include="Execution\EvaluationRisque.cs" />
+    <Compile Include="Execution\AnalyseurInstruction.cs" />
+    <Compile Include="Execution\ResultatRequete.cs" />
+    <Compile Include="Execution\ITransactionExecution.cs" />
+    <Compile Include="Optimisation\Severite.cs" />
+    <Compile Include="Optimisation\ResultatAnalyse.cs" />
+    <Compile Include="Optimisation\IRegleAnalyse.cs" />
+    <Compile Include="Optimisation\RegleSelectEtoile.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+</Project>
