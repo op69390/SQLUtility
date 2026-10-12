@@ -286,6 +286,76 @@ namespace SQLUtility.Data.Providers
             return noms;
         }
 
+        public IReadOnlyList<ColonneInfo> ListerTypesColonnes(ConnexionProfil profil, string schema)
+        {
+            // OPT-09 : types des colonnes du schéma (une même zone Atlas a en principe le même type partout).
+            if (profil == null) throw new ArgumentNullException(nameof(profil));
+            if (string.IsNullOrEmpty(schema)) throw new ArgumentNullException(nameof(schema));
+
+            const string sql =
+                "SELECT DISTINCT COLUMN_NAME, DATA_TYPE FROM QSYS2.SYSCOLUMNS " +
+                "WHERE TABLE_SCHEMA = ? ORDER BY COLUMN_NAME";
+
+            List<ColonneInfo> colonnes = new List<ColonneInfo>();
+            using (OdbcConnection connexion = new OdbcConnection(ConstruireChaineConnexion(profil)))
+            using (OdbcCommand commande = new OdbcCommand(sql, connexion))
+            {
+                commande.Parameters.Add("schema", OdbcType.VarChar, 128).Value = schema.ToUpperInvariant();
+                connexion.Open();
+                using (OdbcDataReader lecteur = commande.ExecuteReader())
+                {
+                    while (lecteur.Read())
+                    {
+                        string nom = LireTexte(lecteur, 0);
+                        if (string.IsNullOrEmpty(nom)) continue;
+                        colonnes.Add(new ColonneInfo { Nom = nom, TypeDonnee = LireTexte(lecteur, 1) });
+                    }
+                }
+            }
+            return colonnes;
+        }
+
+        public IReadOnlyList<IndexConseille> ListerIndexConseilles(ConnexionProfil profil, string schema, string table)
+        {
+            // OPT-11 : conseils d'index de l'optimiseur. DB2 for i n'a pas d'EXPLAIN : SYSIXADV garde
+            // la trace des chemins d'accès qui ont manqué aux requêtes réellement exécutées.
+            if (profil == null) throw new ArgumentNullException(nameof(profil));
+            if (string.IsNullOrEmpty(schema)) throw new ArgumentNullException(nameof(schema));
+            if (string.IsNullOrEmpty(table)) throw new ArgumentNullException(nameof(table));
+
+            const string sql =
+                "SELECT TABLE_SCHEMA, TABLE_NAME, KEY_COLUMNS_ADVISED, INDEX_TYPE, TIMES_ADVISED, " +
+                "LAST_ADVISED, ESTIMATED_CREATION_TIME, REASON_ADVISED " +
+                "FROM QSYS2.SYSIXADV WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
+                "ORDER BY TIMES_ADVISED DESC";
+
+            List<IndexConseille> conseils = new List<IndexConseille>();
+            using (OdbcConnection connexion = new OdbcConnection(ConstruireChaineConnexion(profil, true, null)))
+            using (OdbcCommand commande = new OdbcCommand(sql, connexion))
+            {
+                commande.Parameters.Add("schema", OdbcType.VarChar, 128).Value = schema.ToUpperInvariant();
+                commande.Parameters.Add("table", OdbcType.VarChar, 128).Value = table.ToUpperInvariant();
+                connexion.Open();
+                using (OdbcDataReader lecteur = commande.ExecuteReader())
+                {
+                    while (lecteur.Read())
+                    {
+                        IndexConseille conseil = new IndexConseille();
+                        conseil.Schema = LireTexte(lecteur, 0);
+                        conseil.Table = LireTexte(lecteur, 1);
+                        conseil.Colonnes = LireTexte(lecteur, 2);
+                        conseil.TypeIndex = LireTexte(lecteur, 3);
+                        conseil.NombreConseils = lecteur.IsDBNull(4) ? 0 : Convert.ToInt64(lecteur.GetValue(4), CultureInfo.InvariantCulture);
+                        conseil.DernierConseil = lecteur.IsDBNull(5) ? (DateTime?)null : Convert.ToDateTime(lecteur.GetValue(5), CultureInfo.InvariantCulture);
+                        conseil.DureeCreationSecondes = lecteur.IsDBNull(6) ? (long?)null : Convert.ToInt64(lecteur.GetValue(6), CultureInfo.InvariantCulture);
+                        conseil.Raison = LireTexte(lecteur, 7);
+                        conseils.Add(conseil);
+                    }
+                }
+            }
+            return conseils;
+        }
+
         // ---- Lecture défensive des valeurs du DataReader ----
 
         private static string LireTexte(OdbcDataReader lecteur, int index)

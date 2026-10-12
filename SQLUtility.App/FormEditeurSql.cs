@@ -8,6 +8,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using SQLUtility.Core.Assistant;
 using SQLUtility.Core.Catalogue;
 using SQLUtility.Core.Connexions;
 using SQLUtility.Core.Edition;
@@ -33,6 +34,9 @@ namespace SQLUtility.App
 
         private bool pColorationEnCours;
         private readonly List<IRegleAnalyse> pRegles;
+
+        // Types des colonnes du schéma chargé, pour OPT-09 (null : nom ambigu entre tables).
+        private Dictionary<string, CategorieType?> pTypesCatalogue = new Dictionary<string, CategorieType?>(StringComparer.OrdinalIgnoreCase);
         private readonly List<ResultatAnalyse> pResultats = new List<ResultatAnalyse>();
 
         // Auto-complétion (EF-16)
@@ -70,7 +74,8 @@ namespace SQLUtility.App
             pParametres = parametres;
             pGestionnaire = gestionnaire;
             InitializeComponent();
-            pRegles = new List<IRegleAnalyse> { new RegleSelectEtoile() };
+            // OPT-01 à OPT-10 ; OPT-09 lit les types du schéma chargé (« Charger ce schéma »).
+            pRegles = CatalogueRegles.Toutes(TypeColonneCatalogue);
             InitialiserCompletion();
             PeuplerConnexionsEditeur();
             // Second abonnement, hors de la garde de coloration : toute modification met le titre à jour.
@@ -89,6 +94,100 @@ namespace SQLUtility.App
             // L'exemple n'est pas un travail à enregistrer.
             pTexteEnregistre = zoneEditeur.Text;
             MettreAJourTitre();
+        }
+
+        // ----------------------------------------------------------------- Analyse et index conseillés (OPT-01 à OPT-11)
+
+        /// <summary>Famille de type d'une colonne du schéma chargé ; null si inconnue ou ambiguë.</summary>
+        private CategorieType? TypeColonneCatalogue(string nom)
+        {
+            CategorieType? categorie;
+            return nom != null && pTypesCatalogue.TryGetValue(nom, out categorie) ? categorie : null;
+        }
+
+        private void boutonIndex_Click(object sender, EventArgs e)
+        {
+            RechercherIndexConseilles();
+        }
+
+        /// <summary>
+        /// Index conseillés par l'optimiseur pour chaque table citée dans le script (hors étapes
+        /// WITH) ; une table non qualifiée est cherchée dans la bibliothèque par défaut du profil.
+        /// </summary>
+        internal void RechercherIndexConseilles()
+        {
+            if (pProfilCatalogue == null || pProviderCatalogue == null)
+            {
+                Statut("Choisissez d'abord une connexion (liste « Connexion / schéma »).");
+                return;
+            }
+            string schemaParDefaut = null;
+            if (!string.IsNullOrEmpty(pProfilCatalogue.BibliothequeParDefaut))
+                schemaParDefaut = pProfilCatalogue.BibliothequeParDefaut.Split(new[] { ',', ' ', ';' }, StringSplitOptions.RemoveEmptyEntries)[0].ToUpperInvariant();
+
+            List<KeyValuePair<string, string>> tables = new List<KeyValuePair<string, string>>();
+            List<JetonAnalyse> jetons = AnalyseLexicale.Jetons(zoneEditeur.Text);
+            foreach (Plage plage in AnalyseLexicale.Instructions(jetons))
+            {
+                foreach (TableCitee table in AnalyseLexicale.TablesCitees(jetons, plage))
+                {
+                    string schema = table.Schema ?? schemaParDefaut;
+                    if (schema == null) continue;
+                    KeyValuePair<string, string> cle = new KeyValuePair<string, string>(schema, table.Nom);
+                    if (!tables.Contains(cle)) tables.Add(cle);
+                }
+            }
+            grilleIndex.Rows.Clear();
+            ongletsBas.SelectedTab = ongletIndex;
+            if (tables.Count == 0)
+            {
+                Statut("Aucune table qualifiée dans le script (ou pas de bibliothèque par défaut dans le profil).");
+                return;
+            }
+
+            Cursor curseur = Cursor;
+            Cursor = Cursors.WaitCursor;
+            int nombre = 0;
+            try
+            {
+                foreach (KeyValuePair<string, string> table in tables)
+                {
+                    IReadOnlyList<IndexConseille> conseils = pProviderCatalogue.ListerIndexConseilles(pProfilCatalogue, table.Key, table.Value);
+                    for (int i = 0; i < conseils.Count; i++)
+                    {
+                        IndexConseille conseil = conseils[i];
+                        int ligne = grilleIndex.Rows.Add(conseil.Schema + "." + conseil.Table, conseil.Colonnes, conseil.TypeIndex,
+                            conseil.NombreConseils.ToString("N0", CultureInfo.CurrentCulture),
+                            conseil.DernierConseil.HasValue ? conseil.DernierConseil.Value.ToString("dd/MM/yyyy HH:mm", CultureInfo.InvariantCulture) : string.Empty,
+                            conseil.DureeCreationSecondes.HasValue ? conseil.DureeCreationSecondes.Value.ToString(CultureInfo.CurrentCulture) : string.Empty,
+                            conseil.Raison, conseil.InstructionCreation(i + 1));
+                        grilleIndex.Rows[ligne].Tag = conseil.InstructionCreation(i + 1);
+                        nombre++;
+                    }
+                }
+                Statut(nombre == 0
+                    ? "Aucun index conseillé pour " + tables.Count + " table(s) : l'optimiseur n'a rien relevé."
+                    : nombre + " index conseillé(s) pour " + tables.Count + " table(s).");
+            }
+            catch (Exception ex)
+            {
+                Statut("Index conseillés indisponibles : " + ex.Message
+                    + " — vérifiez l'accès à QSYS2.SYSIXADV (SELECT * FROM QSYS2.SYSIXADV FETCH FIRST 1 ROW ONLY).");
+            }
+            finally
+            {
+                Cursor = curseur;
+            }
+        }
+
+        /// <summary>Copie l'instruction de création dans l'éditeur, sans l'exécuter : un index se valide avant.</summary>
+        private void grilleIndex_CellDoubleClick(object sender, DataGridViewCellEventArgs e)
+        {
+            if (e.RowIndex < 0) return;
+            string instruction = grilleIndex.Rows[e.RowIndex].Tag as string;
+            if (string.IsNullOrEmpty(instruction)) return;
+            InsererInstruction("-- Index conseillé par l'optimiseur : à faire valider avant création (place disque, maintenance à chaque mise à jour)\n" + instruction);
+            Statut("Instruction de création copiée dans l'éditeur : à faire valider avant toute exécution.");
         }
 
         // ----------------------------------------------------------------- Fichiers .sql (EF-33)
@@ -619,7 +718,23 @@ namespace SQLUtility.App
                 {
                     if (!string.IsNullOrEmpty(table.Nom)) identifiants.Add(table.Nom);
                 }
-                identifiants.AddRange(pProviderCatalogue.ListerNomsColonnes(pProfilCatalogue, schema));
+                // Noms (complétion) et types (OPT-09) en une seule lecture du catalogue.
+                Dictionary<string, CategorieType?> types = new Dictionary<string, CategorieType?>(StringComparer.OrdinalIgnoreCase);
+                foreach (ColonneInfo colonne in pProviderCatalogue.ListerTypesColonnes(pProfilCatalogue, schema))
+                {
+                    CategorieType categorie = TypesSql.Categorie(colonne.TypeDonnee);
+                    CategorieType? connu;
+                    if (!types.TryGetValue(colonne.Nom, out connu))
+                    {
+                        types[colonne.Nom] = categorie;
+                        identifiants.Add(colonne.Nom);
+                    }
+                    else if (connu.HasValue && connu.Value != categorie)
+                    {
+                        types[colonne.Nom] = null; // Même nom, types différents selon les tables : ambigu, OPT-09 se tait.
+                    }
+                }
+                pTypesCatalogue = types;
 
                 pIdentifiantsCatalogue = identifiants;
                 etiquetteStatut.Text = identifiants.Count + " identifiant(s) du schéma " + schema + " chargé(s) pour la complétion.";

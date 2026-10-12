@@ -48,6 +48,19 @@
             this.ongletResultats = new System.Windows.Forms.TabPage();
             this.ongletAnalyse = new System.Windows.Forms.TabPage();
             this.grilleResultats = new System.Windows.Forms.DataGridView();
+            this.ongletIndex = new System.Windows.Forms.TabPage();
+            this.panneauIndex = new System.Windows.Forms.Panel();
+            this.boutonIndex = new System.Windows.Forms.Button();
+            this.etiquetteIndex = new System.Windows.Forms.Label();
+            this.grilleIndex = new System.Windows.Forms.DataGridView();
+            this.colIxTable = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIxColonnes = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIxType = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIxNombre = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIxDernier = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIxDuree = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIxRaison = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.colIxInstruction = new System.Windows.Forms.DataGridViewTextBoxColumn();
             this.barreStatut = new System.Windows.Forms.StatusStrip();
             this.etiquetteStatut = new System.Windows.Forms.ToolStripStatusLabel();
             this.menuEditeur.SuspendLayout();
@@ -62,6 +75,9 @@
             this.ongletResultats.SuspendLayout();
             this.ongletAnalyse.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.grilleResultats)).BeginInit();
+            this.ongletIndex.SuspendLayout();
+            this.panneauIndex.SuspendLayout();
+            ((System.ComponentModel.ISupportInitialize)(this.grilleIndex)).BeginInit();
             this.barreStatut.SuspendLayout();
             this.SuspendLayout();
             //
@@ -358,6 +374,7 @@
             //
             this.ongletsBas.Controls.Add(this.ongletResultats);
             this.ongletsBas.Controls.Add(this.ongletAnalyse);
+            this.ongletsBas.Controls.Add(this.ongletIndex);
             this.ongletsBas.Dock = System.Windows.Forms.DockStyle.Fill;
             this.ongletsBas.Location = new System.Drawing.Point(0, 40);
             this.ongletsBas.Name = "ongletsBas";
@@ -384,6 +401,122 @@
             this.ongletAnalyse.TabIndex = 1;
             this.ongletAnalyse.Text = "Analyse (double-clic : aller à la position)";
             this.ongletAnalyse.UseVisualStyleBackColor = true;
+            //
+            // ongletIndex
+            //
+            this.ongletIndex.Controls.Add(this.grilleIndex);
+            this.ongletIndex.Controls.Add(this.panneauIndex);
+            this.ongletIndex.Location = new System.Drawing.Point(4, 22);
+            this.ongletIndex.Name = "ongletIndex";
+            this.ongletIndex.Size = new System.Drawing.Size(776, 177);
+            this.ongletIndex.TabIndex = 2;
+            this.ongletIndex.Text = "Index conseillés";
+            this.ongletIndex.UseVisualStyleBackColor = true;
+            //
+            // panneauIndex
+            //
+            this.panneauIndex.Controls.Add(this.etiquetteIndex);
+            this.panneauIndex.Controls.Add(this.boutonIndex);
+            this.panneauIndex.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panneauIndex.Location = new System.Drawing.Point(0, 0);
+            this.panneauIndex.Name = "panneauIndex";
+            this.panneauIndex.Size = new System.Drawing.Size(776, 32);
+            this.panneauIndex.TabIndex = 0;
+            //
+            // boutonIndex
+            //
+            this.boutonIndex.Location = new System.Drawing.Point(4, 4);
+            this.boutonIndex.Name = "boutonIndex";
+            this.boutonIndex.Size = new System.Drawing.Size(290, 24);
+            this.boutonIndex.TabIndex = 0;
+            this.boutonIndex.Text = "Rechercher pour les tables du script";
+            this.boutonIndex.UseVisualStyleBackColor = true;
+            this.boutonIndex.Click += new System.EventHandler(this.boutonIndex_Click);
+            //
+            // etiquetteIndex
+            //
+            this.etiquetteIndex.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left)
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.etiquetteIndex.ForeColor = System.Drawing.SystemColors.GrayText;
+            this.etiquetteIndex.Location = new System.Drawing.Point(302, 2);
+            this.etiquetteIndex.Name = "etiquetteIndex";
+            this.etiquetteIndex.Size = new System.Drawing.Size(470, 28);
+            this.etiquetteIndex.TabIndex = 1;
+            this.etiquetteIndex.Text = "Conseils de l'optimiseur DB2 (QSYS2.SYSIXADV). Double-clic : copier l'instruction de création dans l'éditeur (à faire valider).";
+            this.etiquetteIndex.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
+            //
+            // grilleIndex
+            //
+            this.grilleIndex.AllowUserToAddRows = false;
+            this.grilleIndex.AllowUserToDeleteRows = false;
+            this.grilleIndex.AutoSizeColumnsMode = System.Windows.Forms.DataGridViewAutoSizeColumnsMode.Fill;
+            this.grilleIndex.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.AutoSize;
+            this.grilleIndex.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.colIxTable,
+            this.colIxColonnes,
+            this.colIxType,
+            this.colIxNombre,
+            this.colIxDernier,
+            this.colIxDuree,
+            this.colIxRaison,
+            this.colIxInstruction});
+            this.grilleIndex.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.grilleIndex.Location = new System.Drawing.Point(0, 32);
+            this.grilleIndex.Name = "grilleIndex";
+            this.grilleIndex.ReadOnly = true;
+            this.grilleIndex.RowHeadersVisible = false;
+            this.grilleIndex.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.grilleIndex.Size = new System.Drawing.Size(776, 145);
+            this.grilleIndex.TabIndex = 1;
+            this.grilleIndex.CellDoubleClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.grilleIndex_CellDoubleClick);
+            //
+            // colIxTable
+            //
+            this.colIxTable.FillWeight = 90F;
+            this.colIxTable.HeaderText = "Table";
+            this.colIxTable.Name = "colIxTable";
+            //
+            // colIxColonnes
+            //
+            this.colIxColonnes.FillWeight = 140F;
+            this.colIxColonnes.HeaderText = "Colonnes conseillées";
+            this.colIxColonnes.Name = "colIxColonnes";
+            //
+            // colIxType
+            //
+            this.colIxType.FillWeight = 45F;
+            this.colIxType.HeaderText = "Type";
+            this.colIxType.Name = "colIxType";
+            //
+            // colIxNombre
+            //
+            this.colIxNombre.FillWeight = 50F;
+            this.colIxNombre.HeaderText = "Conseillé (fois)";
+            this.colIxNombre.Name = "colIxNombre";
+            //
+            // colIxDernier
+            //
+            this.colIxDernier.FillWeight = 75F;
+            this.colIxDernier.HeaderText = "Dernier conseil";
+            this.colIxDernier.Name = "colIxDernier";
+            //
+            // colIxDuree
+            //
+            this.colIxDuree.FillWeight = 50F;
+            this.colIxDuree.HeaderText = "Création (s)";
+            this.colIxDuree.Name = "colIxDuree";
+            //
+            // colIxRaison
+            //
+            this.colIxRaison.FillWeight = 50F;
+            this.colIxRaison.HeaderText = "Raison";
+            this.colIxRaison.Name = "colIxRaison";
+            //
+            // colIxInstruction
+            //
+            this.colIxInstruction.FillWeight = 220F;
+            this.colIxInstruction.HeaderText = "Instruction de création (à faire valider)";
+            this.colIxInstruction.Name = "colIxInstruction";
             //
             // grilleResultats
             //
@@ -446,6 +579,9 @@
             this.ongletResultats.ResumeLayout(false);
             this.ongletAnalyse.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)(this.grilleResultats)).EndInit();
+            this.ongletIndex.ResumeLayout(false);
+            this.panneauIndex.ResumeLayout(false);
+            ((System.ComponentModel.ISupportInitialize)(this.grilleIndex)).EndInit();
             this.barreStatut.ResumeLayout(false);
             this.barreStatut.PerformLayout();
             this.ResumeLayout(false);
@@ -486,6 +622,19 @@
         private System.Windows.Forms.TabPage ongletResultats;
         private System.Windows.Forms.TabPage ongletAnalyse;
         private System.Windows.Forms.DataGridView grilleResultats;
+        private System.Windows.Forms.TabPage ongletIndex;
+        private System.Windows.Forms.Panel panneauIndex;
+        private System.Windows.Forms.Button boutonIndex;
+        private System.Windows.Forms.Label etiquetteIndex;
+        private System.Windows.Forms.DataGridView grilleIndex;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxTable;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxColonnes;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxType;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxNombre;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxDernier;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxDuree;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxRaison;
+        private System.Windows.Forms.DataGridViewTextBoxColumn colIxInstruction;
         private System.Windows.Forms.StatusStrip barreStatut;
         private System.Windows.Forms.ToolStripStatusLabel etiquetteStatut;
     }

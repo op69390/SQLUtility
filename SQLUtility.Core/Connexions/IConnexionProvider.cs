@@ -35,6 +35,16 @@ namespace SQLUtility.Core.Connexions
         IReadOnlyList<string> ListerNomsColonnes(ConnexionProfil profil, string schema);
 
         /// <summary>
+        /// Couples distincts (nom, type) des colonnes d'un schéma : complétion de l'éditeur et
+        /// contrôle des constantes (OPT-09). Seuls <see cref="ColonneInfo.Nom"/> et
+        /// <see cref="ColonneInfo.TypeDonnee"/> sont renseignés.
+        /// </summary>
+        IReadOnlyList<ColonneInfo> ListerTypesColonnes(ConnexionProfil profil, string schema);
+
+        /// <summary>Index conseillés par l'optimiseur pour une table (QSYS2.SYSIXADV), du plus au moins conseillé. (OPT-11)</summary>
+        IReadOnlyList<IndexConseille> ListerIndexConseilles(ConnexionProfil profil, string schema, string table);
+
+        /// <summary>
         /// Indique si une table est journalisée. Détermine l'irréversibilité d'un DML
         /// et conditionne l'avertissement renforcé avant exécution. (EF-30)
         /// </summary>

@@ -46,6 +46,7 @@
     <Compile Include="Catalogue\RelationInfo.cs" />
     <Compile Include="Catalogue\StructureTable.cs" />
     <Compile Include="Catalogue\ConstructeurStructureTable.cs" />
+    <Compile Include="Catalogue\IndexConseille.cs" />
     <Compile Include="Dates\FormatDate.cs" />
     <Compile Include="Dates\DescriptionFormatDate.cs" />
     <Compile Include="Dates\ReferentielFormatsDate.cs" />
@@ -82,6 +83,8 @@
     <Compile Include="Optimisation\ResultatAnalyse.cs" />
     <Compile Include="Optimisation\IRegleAnalyse.cs" />
     <Compile Include="Optimisation\RegleSelectEtoile.cs" />
+    <Compile Include="Optimisation\AnalyseLexicale.cs" />
+    <Compile Include="Optimisation\ReglesAnalyse.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
